@@ -5,30 +5,75 @@ before:
     - go mod tidy
 
 builds:
-  - env:
-      - CGO_ENABLED=1
+  - id: linux-amd64
     main: .
     binary: infai
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
+    goos: [linux]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
     ldflags:
       - -s -w -X main.version={{ .Version }}
-    ignore:
-      - goos: windows
-        goarch: arm64
+
+  - id: linux-arm64
+    main: .
+    binary: infai
+    goos: [linux]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: darwin-amd64
+    main: .
+    binary: infai
+    goos: [darwin]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC=o64-clang
+      - CXX=o64-clang++
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: darwin-arm64
+    main: .
+    binary: infai
+    goos: [darwin]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+      - CC=oa64-clang
+      - CXX=oa64-clang++
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+  - id: windows-amd64
+    main: .
+    binary: infai
+    goos: [windows]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CC=x86_64-w64-mingw32-gcc
+      - CXX=x86_64-w64-mingw32-g++
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
 
 archives:
-  - format: tar.gz
-    name_template: >-
+  - name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    formats:
+      - tar.gz
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
 checksum:
   name_template: "checksums.txt"
@@ -41,17 +86,14 @@ changelog:
       - "^test:"
       - "^chore:"
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: infai
+    binaries:
+      - infai
+    repository:
       owner: dipankardas011
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/dipankardas011/infai"
     description: "Zero-management launch templates for llama.cpp"
-    license: "MIT"
-    dependencies:
-      - name: llama.cpp
-        type: optional
-    test: |
-      system "#{bin}/infai", "--version"
