@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,7 +13,16 @@ import (
 	"github.com/dipankardas011/infai/tui"
 )
 
+var version = "dev"
+
 func main() {
+	showVersion := flag.Bool("version", false, "print version")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("infai", version)
+		return
+	}
 	database, err := db.Open()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "db: %v\n", err)

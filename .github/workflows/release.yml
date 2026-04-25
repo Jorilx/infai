@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GOLANG_CROSS_VERSION: v1.26.2
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Release
+        run: |
+          docker run \
+            --rm \
+            -e CGO_ENABLED=1 \
+            -e GITHUB_TOKEN \
+            -e HOMEBREW_TAP_GITHUB_TOKEN \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD":/go/src/github.com/dipankardas011/infai \
+            -w /go/src/github.com/dipankardas011/infai \
+            ghcr.io/goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
+            release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}

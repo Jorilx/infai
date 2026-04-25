@@ -27,6 +27,18 @@ Simplify configuration management and run local models faster. Perfect for rapid
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install dipankardas011/tap/infai
+```
+
+### Download Binary
+
+Grab a pre-built binary from the [Releases](https://github.com/dipankardas011/infai/releases) page.
+
+### From Source
+
 Requires Go 1.23+ and a C compiler (for SQLite).
 
 ```bash
