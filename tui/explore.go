@@ -1,16 +1,30 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dipankardas011/infai/db"
+	"github.com/dipankardas011/infai/scanner"
 )
+
+type syncRequest struct {
+	folder string
+	result chan syncResult
+}
+
+type syncResult struct {
+	removed int
+	updated int
+	err     error
+}
 
 func expandPath(p string) (string, error) {
 	if strings.HasPrefix(p, "~/") {
@@ -26,13 +40,16 @@ func expandPath(p string) (string, error) {
 type ExploreModel struct {
 	database *db.DB
 	dirs     []string
+	syncChan chan syncRequest
 
-	cursor int
-	adding bool
-	input  textinput.Model
-	errMsg string
-	width  int
-	height int
+	cursor  int
+	adding  bool
+	input   textinput.Model
+	errMsg  string
+	width   int
+	height  int
+	syncing bool
+	spinner spinner.Model
 }
 
 func NewExploreModel(database *db.DB, dirs []string, w, h int) ExploreModel {
@@ -41,7 +58,19 @@ func NewExploreModel(database *db.DB, dirs []string, w, h int) ExploreModel {
 	ti := textinput.New()
 	ti.Placeholder = "/path/to/models"
 	ti.CharLimit = 256
-	return ExploreModel{database: database, dirs: cp, input: ti, width: w, height: h}
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	m := ExploreModel{
+		database: database,
+		dirs:     cp,
+		input:    ti,
+		width:    w,
+		height:   h,
+		spinner:  s,
+		syncChan: make(chan syncRequest),
+	}
+	go m.syncWorker()
+	return m
 }
 
 func (m ExploreModel) SetSize(w, h int) ExploreModel {
@@ -50,6 +79,22 @@ func (m ExploreModel) SetSize(w, h int) ExploreModel {
 }
 
 func (m ExploreModel) Dirs() []string { return m.dirs }
+
+func (m ExploreModel) syncWorker() {
+	for req := range m.syncChan {
+		entries, err := scanner.Scan([]string{req.folder})
+		if err != nil {
+			req.result <- syncResult{err: fmt.Errorf("scan: %v", err)}
+			continue
+		}
+		removed, updated, err := m.database.Sync(entries)
+		if err != nil {
+			req.result <- syncResult{err: fmt.Errorf("sync: %v", err)}
+			continue
+		}
+		req.result <- syncResult{removed: removed, updated: updated}
+	}
+}
 
 func (m ExploreModel) Update(msg tea.Msg) (ExploreModel, tea.Cmd) {
 	if m.adding {
@@ -123,6 +168,31 @@ func (m ExploreModel) Update(msg tea.Msg) (ExploreModel, tea.Cmd) {
 				m.cursor--
 			}
 			m.errMsg = ""
+		case "s":
+			if m.syncing || len(m.dirs) == 0 {
+				break
+			}
+			folder := m.dirs[m.cursor]
+			result := make(chan syncResult)
+			m.syncChan <- syncRequest{folder: folder, result: result}
+			m.syncing = true
+			return m, func() tea.Msg {
+				res := <-result
+				return syncDoneMsg{removed: res.removed, updated: res.updated, err: res.err}
+			}
+		}
+	case syncDoneMsg:
+		m.syncing = false
+		if msg.err != nil {
+			m.errMsg = msg.err.Error()
+		} else if msg.removed == 0 && msg.updated == 0 {
+			m.errMsg = "already in sync"
+		} else {
+			m.errMsg = fmt.Sprintf("synced: %d updated, %d removed", msg.updated, msg.removed)
+		}
+	case spinner.TickMsg:
+		if m.syncing {
+			m.spinner, _ = m.spinner.Update(msg)
 		}
 	}
 	return m, nil
@@ -152,7 +222,9 @@ func (m ExploreModel) View() string {
 	}
 
 	sb.WriteString("\n")
-	if m.adding {
+	if m.syncing {
+		sb.WriteString(styleSelected.Render(m.spinner.View()+" syncing...") + "\n")
+	} else if m.adding {
 		sb.WriteString(lipgloss.NewStyle().Foreground(t.Secondary).Render("add folder: "))
 		sb.WriteString(m.input.View() + "\n")
 		sb.WriteString(helpStyle.Render("enter: confirm  esc: cancel add") + "\n")
@@ -160,7 +232,7 @@ func (m ExploreModel) View() string {
 		if m.errMsg != "" {
 			sb.WriteString(errStyle.Render(m.errMsg) + "\n")
 		}
-		sb.WriteString(helpStyle.Render("a: add  d: remove  ↑↓: navigate  esc: back & rescan"))
+		sb.WriteString(helpStyle.Render("a: add  d: remove  s: sync  ↑↓: navigate  esc: back & rescan"))
 	}
 	content := sb.String()
 	tBox := ActiveTheme

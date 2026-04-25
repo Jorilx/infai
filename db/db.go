@@ -38,19 +38,26 @@ func Open() (*DB, error) {
 func (d *DB) Close() { d.conn.Close() }
 
 func (d *DB) migrate() error {
-	// Add columns to models for existing databases — ignore error if already exists.
 	d.conn.Exec(`ALTER TABLE models ADD COLUMN scan_dir TEXT NOT NULL DEFAULT ''`)
 	d.conn.Exec(`ALTER TABLE models ADD COLUMN last_used DATETIME DEFAULT CURRENT_TIMESTAMP`)
+	d.conn.Exec(`ALTER TABLE models ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`)
+	d.conn.Exec(`ALTER TABLE models ADD COLUMN last_verified DATETIME DEFAULT CURRENT_TIMESTAMP`)
+	d.conn.Exec(`ALTER TABLE models ADD COLUMN architecture TEXT NOT NULL DEFAULT ''`)
+	d.conn.Exec(`ALTER TABLE models ADD COLUMN model_name TEXT NOT NULL DEFAULT ''`)
 
 	_, err := d.conn.Exec(`
 CREATE TABLE IF NOT EXISTS models (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_dir     TEXT NOT NULL DEFAULT '',
-    dir_name     TEXT NOT NULL,
-    gguf_path    TEXT NOT NULL UNIQUE,
-    mmproj_path  TEXT NOT NULL DEFAULT '',
-    display_name TEXT NOT NULL,
-    last_used    DATETIME DEFAULT CURRENT_TIMESTAMP
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_dir      TEXT NOT NULL DEFAULT '',
+    dir_name      TEXT NOT NULL,
+    gguf_path     TEXT NOT NULL UNIQUE,
+    mmproj_path   TEXT NOT NULL DEFAULT '',
+    display_name  TEXT NOT NULL,
+    last_used     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    checksum      TEXT NOT NULL DEFAULT '',
+    last_verified DATETIME DEFAULT CURRENT_TIMESTAMP,
+    architecture TEXT NOT NULL DEFAULT '',
+    model_name    TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS scan_dirs (
@@ -148,14 +155,18 @@ func (d *DB) RemoveScanDir(path string) error {
 
 func (d *DB) UpsertModel(m *model.ModelEntry) error {
 	res, err := d.conn.Exec(`
-INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(gguf_path) DO UPDATE SET
     scan_dir=excluded.scan_dir,
     dir_name=excluded.dir_name,
     mmproj_path=excluded.mmproj_path,
-    display_name=excluded.display_name
-`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName)
+    display_name=excluded.display_name,
+    checksum=excluded.checksum,
+    architecture=excluded.architecture,
+    model_name=excluded.model_name,
+    last_verified=CURRENT_TIMESTAMP
+`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName, m.Checksum, m.Architecture, m.ModelName)
 	if err != nil {
 		return err
 	}
@@ -169,7 +180,7 @@ ON CONFLICT(gguf_path) DO UPDATE SET
 }
 
 func (d *DB) ListModels() ([]model.ModelEntry, error) {
-	rows, err := d.conn.Query(`SELECT id, scan_dir, dir_name, gguf_path, mmproj_path, display_name FROM models ORDER BY display_name`)
+	rows, err := d.conn.Query(`SELECT id, scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name FROM models ORDER BY display_name`)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +188,7 @@ func (d *DB) ListModels() ([]model.ModelEntry, error) {
 	var out []model.ModelEntry
 	for rows.Next() {
 		var m model.ModelEntry
-		if err := rows.Scan(&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName); err != nil {
+		if err := rows.Scan(&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName, &m.Checksum, &m.Architecture, &m.ModelName); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -186,7 +197,7 @@ func (d *DB) ListModels() ([]model.ModelEntry, error) {
 }
 
 func (d *DB) ListRecentModels(limit int) ([]model.ModelEntry, error) {
-	rows, err := d.conn.Query(`SELECT id, scan_dir, dir_name, gguf_path, mmproj_path, display_name FROM models ORDER BY last_used DESC LIMIT ?`, limit)
+	rows, err := d.conn.Query(`SELECT id, scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name FROM models ORDER BY last_used DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +205,7 @@ func (d *DB) ListRecentModels(limit int) ([]model.ModelEntry, error) {
 	var out []model.ModelEntry
 	for rows.Next() {
 		var m model.ModelEntry
-		if err := rows.Scan(&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName); err != nil {
+		if err := rows.Scan(&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName, &m.Checksum, &m.Architecture, &m.ModelName); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -280,7 +291,7 @@ type RecentEntry struct {
 
 func (d *DB) ListRecents(limit int) ([]RecentEntry, error) {
 	rows, err := d.conn.Query(`
-SELECT m.id, m.scan_dir, m.dir_name, m.gguf_path, m.mmproj_path, m.display_name,
+SELECT m.id, m.scan_dir, m.dir_name, m.gguf_path, m.mmproj_path, m.display_name, m.checksum, m.architecture, m.model_name,
        p.id, p.model_id, p.name, p.port, p.host, p.context_size, p.ngl,
        p.batch_size, p.ubatch_size, p.cache_type_k, p.cache_type_v,
        p.flash_attn, p.jinja, p.temperature, p.reasoning_budget, p.top_p, p.top_k,
@@ -301,7 +312,7 @@ LIMIT ?`, limit)
 		var p model.Profile
 		var flashAttn, jinja, noKVOffload, useMmproj int
 		err := rows.Scan(
-			&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName,
+			&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName, &m.Checksum, &m.Architecture, &m.ModelName,
 			&p.ID, &p.ModelID, &p.Name, &p.Port, &p.Host, &p.ContextSize, &p.NGL,
 			&p.BatchSize, &p.UBatchSize, &p.CacheTypeK, &p.CacheTypeV,
 			&flashAttn, &jinja, &p.Temperature, &p.ReasoningBudget, &p.TopP, &p.TopK,
@@ -377,6 +388,113 @@ ON CONFLICT(model_id, name) DO UPDATE SET
 func (d *DB) DeleteProfile(id int64) error {
 	_, err := d.conn.Exec(`DELETE FROM profiles WHERE id = ?`, id)
 	return err
+}
+
+func (d *DB) Sync(scanned []model.ModelEntry) (int, int, error) {
+	var removed, updated int
+
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+
+	existing, err := tx.Query(`SELECT id, gguf_path, checksum FROM models`)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	dbModels := make(map[int64]map[string]string)
+	for existing.Next() {
+		var id int64
+		var path, checksum string
+		if err := existing.Scan(&id, &path, &checksum); err != nil {
+			existing.Close()
+			return 0, 0, err
+		}
+		dbModels[id] = map[string]string{"path": path, "checksum": checksum}
+	}
+	existing.Close()
+
+	scannedPaths := make(map[string]bool)
+	for _, m := range scanned {
+		scannedPaths[m.GGUFPath] = true
+	}
+
+	for id, info := range dbModels {
+		path := info["path"]
+		checksum := info["checksum"]
+
+		if _, exists := os.Stat(path); os.IsNotExist(exists) {
+			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			removed++
+			continue
+		}
+
+		found := false
+		for _, s := range scanned {
+			if s.GGUFPath == path {
+				found = true
+				if s.Checksum != checksum && s.Checksum != "" {
+					_, err := tx.Exec(`
+						UPDATE models SET checksum = ?, architecture = ?, model_name = ?, last_verified = CURRENT_TIMESTAMP
+						WHERE id = ?
+					`, s.Checksum, s.Architecture, s.ModelName, id)
+					if err != nil {
+						return 0, 0, err
+					}
+					updated++
+				}
+				break
+			}
+		}
+		if !found {
+			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			removed++
+		}
+	}
+
+	for _, m := range scanned {
+		if !scannedPaths[m.GGUFPath] {
+			continue
+		}
+		_, err := tx.Exec(`
+			INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(gguf_path) DO UPDATE SET
+				scan_dir=excluded.scan_dir,
+				dir_name=excluded.dir_name,
+				mmproj_path=excluded.mmproj_path,
+				display_name=excluded.display_name,
+				checksum=excluded.checksum,
+				architecture=excluded.architecture,
+				model_name=excluded.model_name,
+				last_verified=CURRENT_TIMESTAMP
+		`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName, m.Checksum, m.Architecture, m.ModelName)
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+
+	return removed, updated, nil
 }
 
 func scanProfile(rows *sql.Rows) (model.Profile, error) {

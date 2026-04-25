@@ -26,6 +26,10 @@ const (
 type scanDoneMsg struct{ entries []model.ModelEntry }
 type saveProfileMsg struct{ profile model.Profile }
 type deleteProfileMsg struct{ id int64 }
+type syncDoneMsg struct {
+	removed, updated int
+	err              error
+}
 
 // AppModel is the root bubbletea model.
 type AppModel struct {

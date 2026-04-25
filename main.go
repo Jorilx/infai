@@ -46,12 +46,6 @@ func main() {
 		}
 	}
 
-	// Double check we have a binary
-	if serverBin == "" {
-		// Fallback to a prompt or sensible default if still empty?
-		// For now, keep it as is but it will cause issues if empty.
-	}
-
 	scanDirs, err := database.ListScanDirs()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "list scan dirs: %v\n", err)
