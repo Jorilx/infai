@@ -67,7 +67,7 @@ func main() {
 	}
 
 	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24)
-	p := tea.NewProgram(&app, tea.WithAltScreen())
+	p := tea.NewProgram(&app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)

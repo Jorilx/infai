@@ -156,7 +156,6 @@ func (m HomeModel) View() string {
 		containerStyle.Render(recentBox),
 		containerStyle.Render(folderBox),
 		containerStyle.Render(execBox),
-		"\n"+styleHelp.Render("enter: select  q: quit  t: theme"),
 	)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)

@@ -151,8 +151,7 @@ func (m ProfileListModel) View() string {
 	} else if m.statusMsg != "" {
 		status = styleMuted.Render(m.statusMsg)
 	}
-	help := styleHelp.Render("enter: launch/new  e: edit  d: delete  esc: back")
-	footer := status + "\n" + help
+	footer := status
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		m.list.View(),

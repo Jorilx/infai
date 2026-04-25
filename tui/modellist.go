@@ -117,16 +117,9 @@ func (m ModelListModel) View() string {
 		return m.emptyView()
 	}
 	t := ActiveTheme
-	help := styleHelp.Render(
-		"enter: select  r: rescan  /: filter  esc: back",
-	)
-
 	listView := m.list.View()
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		listView,
-		"\n"+help,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Left, listView)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

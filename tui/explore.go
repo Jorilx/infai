@@ -256,7 +256,6 @@ func (m ExploreModel) View() string {
 		if m.errMsg != "" {
 			sb.WriteString(errStyle.Render(m.errMsg) + "\n")
 		}
-		sb.WriteString(helpStyle.Render("a: add  d: remove  s: sync all  ↑↓: navigate  esc: back"))
 	}
 	content := sb.String()
 	tBox := ActiveTheme

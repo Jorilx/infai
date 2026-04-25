@@ -204,16 +204,14 @@ func (s ServerModel) View() string {
 	logView := s.vp.View()
 
 	// Footer
-	var help string
+	footer := ""
 	if s.stopped {
 		exitStatus := styleSuccess.Render("exited cleanly")
 		if s.exitErr != nil {
 			exitStatus = styleError.Render("error: " + s.exitErr.Error())
 		}
-		help = exitStatus + "\n" + styleHelp.Render("esc: back to profiles")
-	} else {
-		help = styleHelp.Render("s: stop server  c: clear logs  esc: stop & back  ↑↓/pgup/pgdn: scroll logs")
+		footer = "\n" + exitStatus
 	}
 
-	return header + "\n\n" + logView + "\n" + help
+	return header + "\n\n" + logView + footer
 }
