@@ -117,7 +117,7 @@ func scanDirectory(dir string) ([]model.ModelEntry, error) {
 		metadata := ""
 
 		if b, err := os.ReadFile(configJson); err == nil {
-			var cfg map[string]interface{}
+			var cfg map[string]any
 			if err := json.Unmarshal(b, &cfg); err == nil {
 				if _, ok := cfg["quantization"]; ok {
 					modelType = "mlx_quantized"

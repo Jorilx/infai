@@ -8,11 +8,14 @@ import (
 	"regexp"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+const stopGraceTimeout = 5 * time.Second
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
@@ -23,12 +26,14 @@ func stripAnsi(s string) string {
 // Tea messages for server I/O.
 type logLineMsg string
 type serverExitMsg struct{ err error }
+type stopTimeoutMsg struct{}
 
-func listenForLog(ch <-chan string) tea.Cmd {
+func listenForLog(ch <-chan string, exitCh <-chan error) tea.Cmd {
 	return func() tea.Msg {
 		line, ok := <-ch
 		if !ok {
-			return serverExitMsg{}
+			err := <-exitCh
+			return serverExitMsg{err: err}
 		}
 		return logLineMsg(line)
 	}
@@ -40,6 +45,7 @@ const maxLogLines = 10000
 type ServerModel struct {
 	cmd         *exec.Cmd
 	logCh       chan string
+	exitCh      chan error
 	logs        []string
 	vp          viewport.Model
 	profileName string
@@ -47,6 +53,7 @@ type ServerModel struct {
 	port        int
 	stopped     bool
 	stopping    bool
+	forceKilled bool
 	exitErr     error
 	width       int
 	height      int
@@ -67,6 +74,7 @@ func NewServerModel(args []string, profileName, modelName string, port, w, h int
 	}
 
 	logCh := make(chan string, 256)
+	exitCh := make(chan error, 1)
 
 	// goroutine: read lines → channel
 	go func() {
@@ -77,16 +85,14 @@ func NewServerModel(args []string, profileName, modelName string, port, w, h int
 		close(logCh)
 	}()
 
-	// goroutine: wait for exit → close pipe
+	// goroutine: wait for exit → close pipe, capture err
 	go func() {
-		cmd.Wait()
+		err := cmd.Wait()
 		pw.Close()
+		exitCh <- err
 	}()
 
-	vpH := h - 6
-	if vpH < 5 {
-		vpH = 5
-	}
+	vpH := max(h-6, 5)
 	vp := viewport.New(w-4, vpH)
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -95,6 +101,7 @@ func NewServerModel(args []string, profileName, modelName string, port, w, h int
 	m := ServerModel{
 		cmd:         cmd,
 		logCh:       logCh,
+		exitCh:      exitCh,
 		vp:          vp,
 		profileName: profileName,
 		modelName:   modelName,
@@ -103,7 +110,7 @@ func NewServerModel(args []string, profileName, modelName string, port, w, h int
 		height:      h,
 		initialized: true,
 	}
-	return m, listenForLog(logCh), nil
+	return m, listenForLog(logCh, exitCh), nil
 }
 
 func (s ServerModel) HandleLogLine(line string) (ServerModel, tea.Cmd) {
@@ -116,7 +123,7 @@ func (s ServerModel) HandleLogLine(line string) (ServerModel, tea.Cmd) {
 	if atBottom {
 		s.vp.GotoBottom()
 	}
-	return s, listenForLog(s.logCh)
+	return s, listenForLog(s.logCh, s.exitCh)
 }
 
 func (s ServerModel) SetExited(err error) ServerModel {
@@ -126,11 +133,20 @@ func (s ServerModel) SetExited(err error) ServerModel {
 	return s
 }
 
-func (s ServerModel) Stop() ServerModel {
+func (s ServerModel) Stop() (ServerModel, tea.Cmd) {
+	if s.cmd == nil || s.cmd.Process == nil || s.stopped || s.stopping {
+		return s, nil
+	}
+	s.stopping = true
+	syscall.Kill(-s.cmd.Process.Pid, syscall.SIGTERM)
+	cmd := tea.Tick(stopGraceTimeout, func(time.Time) tea.Msg { return stopTimeoutMsg{} })
+	return s, cmd
+}
+
+func (s ServerModel) ForceKill() ServerModel {
 	if s.cmd != nil && s.cmd.Process != nil && !s.stopped {
-		s.stopping = true
-		// Kill the whole process group to also terminate child processes.
-		syscall.Kill(-s.cmd.Process.Pid, syscall.SIGTERM)
+		s.forceKilled = true
+		syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
 	}
 	return s
 }
@@ -141,10 +157,7 @@ func (s ServerModel) SetSize(w, h int) ServerModel {
 	}
 	s.width = w
 	s.height = h
-	vpH := h - 6
-	if vpH < 5 {
-		vpH = 5
-	}
+	vpH := max(h-6, 5)
 	s.vp.Width = w - 4
 	s.vp.Height = vpH
 	return s
@@ -171,9 +184,13 @@ func (s ServerModel) View() string {
 	// Header
 	status := lipgloss.NewStyle().Foreground(t.Success).Bold(true).Render("● running")
 	if s.stopping {
-		status = lipgloss.NewStyle().Foreground(t.Error).Render("◌ stopping…")
+		status = lipgloss.NewStyle().Foreground(t.Error).Bold(true).Render("◌ shutting down (SIGTERM)…")
 	} else if s.stopped {
-		status = lipgloss.NewStyle().Foreground(t.Muted).Render("■ stopped")
+		label := "■ stopped"
+		if s.forceKilled {
+			label = "■ force-killed (SIGKILL)"
+		}
+		status = lipgloss.NewStyle().Foreground(t.Muted).Render(label)
 	}
 	pid := ""
 	if s.cmd != nil && s.cmd.Process != nil {

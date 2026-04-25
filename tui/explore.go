@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -131,11 +132,9 @@ func (m ExploreModel) Update(msg tea.Msg) (ExploreModel, tea.Cmd) {
 					m.errMsg = "bad path: " + err.Error()
 					return m, nil
 				}
-				for _, d := range m.dirs {
-					if d == path {
-						m.errMsg = "already in list"
-						return m, nil
-					}
+				if slices.Contains(m.dirs, path) {
+					m.errMsg = "already in list"
+					return m, nil
 				}
 				if err := m.database.AddScanDir(path); err != nil {
 					m.errMsg = err.Error()
@@ -181,7 +180,7 @@ func (m ExploreModel) Update(msg tea.Msg) (ExploreModel, tea.Cmd) {
 				m.errMsg = err.Error()
 				break
 			}
-			m.dirs = append(m.dirs[:m.cursor], m.dirs[m.cursor+1:]...)
+			m.dirs = slices.Delete(m.dirs, m.cursor, m.cursor+1)
 			if m.cursor >= len(m.dirs) && m.cursor > 0 {
 				m.cursor--
 			}

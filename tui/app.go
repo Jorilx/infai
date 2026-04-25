@@ -40,6 +40,7 @@ type AppModel struct {
 	width     int
 	height    int
 	errMsg    string
+	quitArmed bool
 
 	modelList     ModelListModel
 	profileList   ProfileListModel
@@ -150,13 +151,35 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case stopTimeoutMsg:
+		if !a.server.stopped && a.server.stopping {
+			a.server = a.server.ForceKill()
+			a.errMsg = "server unresponsive — sent SIGKILL"
+		}
+		return a, nil
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			if a.screen == screenServerRunning {
-				a.server = a.server.Stop()
-				return a, nil
+				if a.server.stopping || a.server.stopped {
+					a.server = a.server.ForceKill()
+					return a, tea.Quit
+				}
+				var cmd tea.Cmd
+				a.server, cmd = a.server.Stop()
+				a.errMsg = "shutting down server (SIGTERM)... ctrl+c again to force quit"
+				return a, cmd
 			}
-			return a, tea.Quit
+			if a.quitArmed {
+				return a, tea.Quit
+			}
+			a.quitArmed = true
+			a.errMsg = "press ctrl+c again to quit"
+			return a, nil
+		}
+		if a.quitArmed {
+			a.quitArmed = false
+			a.errMsg = ""
 		}
 		if a.screen == screenHome && msg.String() == "q" {
 			return a, tea.Quit
@@ -446,13 +469,15 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
-		a.server = a.server.Stop()
-		return a, nil
+		var cmd tea.Cmd
+		a.server, cmd = a.server.Stop()
+		return a, cmd
 	case "esc":
-		a.server = a.server.Stop()
+		var cmd tea.Cmd
+		a.server, cmd = a.server.Stop()
 		a.refreshHome()
 		a.screen = screenHome
-		return a, nil
+		return a, cmd
 	}
 	// Pass scrolling keys to viewport.
 	var cmd tea.Cmd
