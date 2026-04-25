@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -23,10 +24,11 @@ func main() {
 		tui.SetTheme(theme)
 	}
 
-	serverBin, err := database.GetSetting("server_bin")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "setting server_bin: %v\n", err)
-		os.Exit(1)
+	serverBin, _ := database.GetSetting("server_bin")
+	if serverBin == "" {
+		if path, err := exec.LookPath("llama-server"); err == nil {
+			serverBin = path
+		}
 	}
 
 	scanDirs, err := database.ListScanDirs()
@@ -48,7 +50,7 @@ func main() {
 	}
 
 	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24)
-	p := tea.NewProgram(app, tea.WithAltScreen())
+	p := tea.NewProgram(&app, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
 		os.Exit(1)

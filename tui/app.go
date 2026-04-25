@@ -17,6 +17,7 @@ const (
 	screenConfirm
 	screenServerRunning
 	screenExplore
+	screenExecutor
 )
 
 // Cross-screen transition messages.
@@ -40,6 +41,7 @@ type AppModel struct {
 	confirm     ConfirmModel
 	server      ServerModel
 	explore     ExploreModel
+	executor    ExecutorModel
 
 	selectedModel   model.ModelEntry
 	selectedProfile model.Profile
@@ -53,12 +55,13 @@ func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []mode
 		width:     w,
 		height:    h,
 		modelList: NewModelListModel(entries, w, h),
+		executor:  NewExecutorModel(database, serverBin, w, h),
 	}
 }
 
-func (a AppModel) Init() tea.Cmd { return nil }
+func (a *AppModel) Init() tea.Cmd { return nil }
 
-func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case tea.WindowSizeMsg:
@@ -69,6 +72,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.confirm = a.confirm.SetWidth(a.width)
 		a.server = a.server.SetSize(a.width, a.height)
 		a.explore = a.explore.SetSize(a.width, a.height)
+		a.executor = a.executor.SetSize(a.width, a.height)
 		return a, nil
 
 	case scanDoneMsg:
@@ -98,6 +102,11 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		profiles, _ := a.database.ListProfiles(a.selectedModel.ID)
 		a.profileList = a.profileList.SetProfiles(profiles)
+		return a, nil
+
+	case ExecutorSavedMsg:
+		a.serverBin = msg.Bin
+		a.screen = screenModelList
 		return a, nil
 
 	// Server log streaming messages — only process when in server screen.
@@ -140,6 +149,8 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateServer(msg)
 		case screenExplore:
 			return a.updateExplore(msg)
+		case screenExecutor:
+			return a.updateExecutor(msg)
 		}
 	}
 
@@ -165,11 +176,28 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		a.explore, cmd = a.explore.Update(msg)
 		return a, cmd
+	case screenExecutor:
+		var cmd tea.Cmd
+		a.executor, cmd = a.executor.Update(msg)
+		return a, cmd
 	}
 	return a, nil
 }
 
-func (a AppModel) updateModelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateExecutor(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		var cmd tea.Cmd
+		a.executor, cmd = a.executor.SaveAndExit()
+		a.screen = screenModelList
+		return a, cmd
+	}
+	var cmd tea.Cmd
+	a.executor, cmd = a.executor.Update(msg)
+	return a, cmd
+}
+
+func (a *AppModel) updateModelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		if entry, ok := a.modelList.Selected(); ok {
@@ -184,6 +212,12 @@ func (a AppModel) updateModelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if !a.modelList.IsFiltering() {
 			a.explore = NewExploreModel(a.database, a.scanDirs, a.width, a.height)
 			a.screen = screenExplore
+			return a, nil
+		}
+	case "x":
+		if !a.modelList.IsFiltering() {
+			a.executor = NewExecutorModel(a.database, a.serverBin, a.width, a.height)
+			a.screen = screenExecutor
 			return a, nil
 		}
 	case "r":
@@ -201,7 +235,7 @@ func (a AppModel) updateModelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a AppModel) updateProfileList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateProfileList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "backspace":
 		a.screen = screenModelList
@@ -261,7 +295,7 @@ func (a AppModel) updateProfileList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a AppModel) updateProfileEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateProfileEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		a.screen = screenProfileList
@@ -280,7 +314,7 @@ func (a AppModel) updateProfileEdit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		a.screen = screenProfileList
@@ -307,7 +341,7 @@ func (a AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
-func (a AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
 		a.server = a.server.Stop()
@@ -323,7 +357,7 @@ func (a AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		// DB already updated immediately on each add/remove; just sync scanDirs and rescan.
@@ -339,7 +373,7 @@ func (a AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-func (a AppModel) View() string {
+func (a *AppModel) View() string {
 	errBanner := ""
 	if a.errMsg != "" {
 		errBanner = styleError.Render("error: "+a.errMsg) + "\n"
@@ -357,6 +391,8 @@ func (a AppModel) View() string {
 		return a.server.View()
 	case screenExplore:
 		return a.explore.View()
+	case screenExecutor:
+		return a.executor.View()
 	}
 	return ""
 }

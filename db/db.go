@@ -84,8 +84,8 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
-INSERT OR IGNORE INTO settings VALUES ('server_bin', '/home/dipankardas/llama.cpp/build/bin/llama-server');
-INSERT OR IGNORE INTO settings VALUES ('theme', 'tokyonight');
+INSERT OR IGNORE INTO settings VALUES ('server_bin', '');
+INSERT OR IGNORE INTO settings VALUES ('theme', 'gruvbox');
 
 -- migrate legacy models_dir into scan_dirs exactly once, then drop it
 INSERT OR IGNORE INTO scan_dirs SELECT value FROM settings WHERE key='models_dir' AND value != '';

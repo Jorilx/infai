@@ -39,7 +39,7 @@ func (m modelItem) Description() string {
 
 type modelDelegate struct{}
 
-func (d modelDelegate) Height() int                              { return 2 }
+func (d modelDelegate) Height() int                             { return 2 }
 func (d modelDelegate) Spacing() int                            { return 1 }
 func (d modelDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d modelDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -111,7 +111,7 @@ func (m ModelListModel) View() string {
 		return m.emptyView()
 	}
 	help := styleHelp.Render(
-		"enter: select  r: rescan  e: explore folders  t: theme(" + ActiveTheme.Name + ")  /: filter  q: quit",
+		"enter: select  r: rescan  e: explore folders  x: executor  t: theme(" + ActiveTheme.Name + ")  /: filter  q: quit",
 	)
 	return m.list.View() + "\n" + help
 }
