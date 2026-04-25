@@ -9,17 +9,17 @@
 ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝╚═╝
 ```
 
-A terminal UI for managing [llama.cpp](https://github.com/ggerganov/llama.cpp) model profiles.  
-Store named launch profiles in SQLite and run `llama-server` with live log streaming.
-
+**Zero-management launch templates for [llama.cpp](https://github.com/ggerganov/llama.cpp).**  
+Create one-click runnable profiles, manage your inference engine and model locations simply, and monitor performance with live server logs.
 
 ## Features
 
-- **Model Browser** — Auto-scans directories for `.gguf` and `mmproj` files.
-- **Named Profiles** — Save multiple configurations (e.g., `text-only`, `low-vram`) per model.
-- **Smart UI** — Easy pickers for quantization types and units (K, M) for context size.
-- **Live Logs** — Built-in scrollable viewport for `llama-server` output.
-- **Themes** — 11+ themes (Tokyonight, Gruvbox, Rose Pine, etc.) — press `t` to cycle.
+- **One-Click Launch** — Instant start with pre-configured, named profiles (e.g., `text-only`, `low-vram`).
+- **Zero Template Management** — Stop messing with shell aliases and scripts; manage everything through a clean TUI.
+- **Live Inference Logs** — Monitor your server in real-time with a built-in scrollable viewport.
+- **Smart UI** — Easy pickers for quantization types and context size units (K, M).
+- **Easy Path Management** — Quickly configure multiple scan folders and your `llama-server` binary path.
+- **Themes** — 11+ themes (Tokyonight, Gruvbox, Rose Pine, etc.) to match your terminal setup.
 
 ## Install
 
