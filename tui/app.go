@@ -16,6 +16,7 @@ const (
 	screenProfileEdit
 	screenConfirm
 	screenServerRunning
+	screenExplore
 )
 
 // Cross-screen transition messages.
@@ -28,7 +29,7 @@ type AppModel struct {
 	screen    screenKind
 	database  *db.DB
 	serverBin string
-	modelsDir string
+	scanDirs  []string
 	width     int
 	height    int
 	errMsg    string
@@ -38,16 +39,17 @@ type AppModel struct {
 	profileEdit ProfileEditModel
 	confirm     ConfirmModel
 	server      ServerModel
+	explore     ExploreModel
 
 	selectedModel   model.ModelEntry
 	selectedProfile model.Profile
 }
 
-func NewApp(database *db.DB, serverBin, modelsDir string, entries []model.ModelEntry, w, h int) AppModel {
+func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []model.ModelEntry, w, h int) AppModel {
 	return AppModel{
 		database:  database,
 		serverBin: serverBin,
-		modelsDir: modelsDir,
+		scanDirs:  scanDirs,
 		width:     w,
 		height:    h,
 		modelList: NewModelListModel(entries, w, h),
@@ -66,6 +68,7 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.profileEdit = a.profileEdit.SetSize(a.width, a.height)
 		a.confirm = a.confirm.SetWidth(a.width)
 		a.server = a.server.SetSize(a.width, a.height)
+		a.explore = a.explore.SetSize(a.width, a.height)
 		return a, nil
 
 	case scanDoneMsg:
@@ -135,6 +138,8 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateConfirm(msg)
 		case screenServerRunning:
 			return a.updateServer(msg)
+		case screenExplore:
+			return a.updateExplore(msg)
 		}
 	}
 
@@ -156,6 +161,10 @@ func (a AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		a.server, cmd = a.server.Update(msg)
 		return a, cmd
+	case screenExplore:
+		var cmd tea.Cmd
+		a.explore, cmd = a.explore.Update(msg)
+		return a, cmd
 	}
 	return a, nil
 }
@@ -171,9 +180,15 @@ func (a AppModel) updateModelList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.errMsg = ""
 			return a, nil
 		}
+	case "e":
+		if !a.modelList.IsFiltering() {
+			a.explore = NewExploreModel(a.database, a.scanDirs, a.width, a.height)
+			a.screen = screenExplore
+			return a, nil
+		}
 	case "r":
 		return a, func() tea.Msg {
-			entries, _ := scanner.Scan(a.modelsDir)
+			entries, _ := scanner.Scan(a.scanDirs)
 			return scanDoneMsg{entries: entries}
 		}
 	case "t":
@@ -308,6 +323,22 @@ func (a AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
+func (a AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		// DB already updated immediately on each add/remove; just sync scanDirs and rescan.
+		a.scanDirs = a.explore.Dirs()
+		a.screen = screenModelList
+		return a, func() tea.Msg {
+			entries, _ := scanner.Scan(a.scanDirs)
+			return scanDoneMsg{entries: entries}
+		}
+	}
+	var cmd tea.Cmd
+	a.explore, cmd = a.explore.Update(msg)
+	return a, cmd
+}
+
 func (a AppModel) View() string {
 	errBanner := ""
 	if a.errMsg != "" {
@@ -324,6 +355,8 @@ func (a AppModel) View() string {
 		return errBanner + a.confirm.View()
 	case screenServerRunning:
 		return a.server.View()
+	case screenExplore:
+		return a.explore.View()
 	}
 	return ""
 }

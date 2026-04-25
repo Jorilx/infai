@@ -12,6 +12,16 @@ import (
 	"github.com/dipankardas011/infai/model"
 )
 
+const appVersion = "v0.2.0"
+
+const logoASCII = `
+██╗███╗   ██╗███████╗ █████╗ ██╗
+██║████╗  ██║██╔════╝██╔══██╗██║
+██║██╔██╗ ██║█████╗  ███████║██║
+██║██║╚██╗██║██╔══╝  ██╔══██║██║
+██║██║ ╚████║██║     ██║  ██║██║
+╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝╚═╝`
+
 // modelItem wraps ModelEntry for the bubbles list.
 type modelItem struct {
 	entry model.ModelEntry
@@ -20,16 +30,17 @@ type modelItem struct {
 func (m modelItem) FilterValue() string { return m.entry.DisplayName }
 func (m modelItem) Title() string       { return m.entry.DisplayName }
 func (m modelItem) Description() string {
+	scanPart := styleMuted.Render("[" + m.entry.ScanDir + "]")
 	if m.entry.MmprojPath != "" {
-		return styleBadge.Render("mmproj") + "  " + styleMuted.Render(m.entry.GGUFPath)
+		return styleBadge.Render("mmproj") + "  " + scanPart
 	}
-	return styleMuted.Render(m.entry.GGUFPath)
+	return scanPart
 }
 
 type modelDelegate struct{}
 
-func (d modelDelegate) Height() int                             { return 2 }
-func (d modelDelegate) Spacing() int                           { return 1 }
+func (d modelDelegate) Height() int                              { return 2 }
+func (d modelDelegate) Spacing() int                            { return 1 }
 func (d modelDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d modelDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	i, ok := item.(modelItem)
@@ -37,11 +48,10 @@ func (d modelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 		return
 	}
 	title := i.entry.DisplayName
-	desc := ""
+	scanPart := styleMuted.Render("[" + i.entry.ScanDir + "]")
+	desc := scanPart
 	if i.entry.MmprojPath != "" {
-		desc = styleBadge.Render("mmproj") + "  " + styleMuted.Render(i.entry.GGUFPath)
-	} else {
-		desc = styleMuted.Render(i.entry.GGUFPath)
+		desc = styleBadge.Render("mmproj") + "  " + scanPart
 	}
 
 	if index == m.Index() {
@@ -56,6 +66,8 @@ func (d modelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 type ModelListModel struct {
 	list    list.Model
 	entries []model.ModelEntry
+	width   int
+	height  int
 }
 
 func NewModelListModel(entries []model.ModelEntry, w, h int) ModelListModel {
@@ -69,10 +81,11 @@ func NewModelListModel(entries []model.ModelEntry, w, h int) ModelListModel {
 	l.SetShowStatusBar(false)
 	l.SetFilteringEnabled(true)
 	l.SetShowHelp(false)
-	return ModelListModel{list: l, entries: entries}
+	return ModelListModel{list: l, entries: entries, width: w, height: h}
 }
 
 func (m ModelListModel) SetSize(w, h int) ModelListModel {
+	m.width, m.height = w, h
 	m.list.SetSize(w, h-4)
 	return m
 }
@@ -94,10 +107,30 @@ func (m ModelListModel) Update(msg tea.Msg) (ModelListModel, tea.Cmd) {
 }
 
 func (m ModelListModel) View() string {
+	if len(m.entries) == 0 {
+		return m.emptyView()
+	}
 	help := styleHelp.Render(
-		"enter: select  r: rescan  t: theme(" + ActiveTheme.Name + ")  /: filter  q: quit",
+		"enter: select  r: rescan  e: explore folders  t: theme(" + ActiveTheme.Name + ")  /: filter  q: quit",
 	)
 	return m.list.View() + "\n" + help
+}
+
+func (m ModelListModel) emptyView() string {
+	t := ActiveTheme
+	logoStyle := lipgloss.NewStyle().Foreground(t.Primary).Bold(true)
+	versionStyle := lipgloss.NewStyle().Foreground(t.Secondary)
+	hintStyle := lipgloss.NewStyle().Foreground(t.Muted).Italic(true)
+
+	var sb strings.Builder
+	sb.WriteString(logoStyle.Render(logoASCII))
+	sb.WriteString("\n\n")
+	sb.WriteString(versionStyle.Render("  " + appVersion))
+	sb.WriteString("\n\n")
+	sb.WriteString(hintStyle.Render("  no models found — press [e] to add scan folders"))
+	sb.WriteString("\n\n")
+	sb.WriteString(hintStyle.Render("  t: theme  q: quit"))
+	return sb.String()
 }
 
 func (m ModelListModel) Selected() (model.ModelEntry, bool) {

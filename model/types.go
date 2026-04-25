@@ -2,6 +2,7 @@ package model
 
 type ModelEntry struct {
 	ID          int64
+	ScanDir     string
 	DirName     string
 	GGUFPath    string
 	MmprojPath  string

@@ -5,6 +5,9 @@ Stop polluting your shell config with aliases — browse your GGUF models, store
 
 ![themes: tokyonight · everforest · onedark · rosepine · gruvbox]()
 
+![profile config](profile-config.webp)
+![running model](runningmodel.webp)
+
 ## Features
 
 - **Model browser** — auto-scans your models directory for `.gguf` files; detects `mmproj` vision projection files automatically
@@ -44,8 +47,9 @@ Two settings are seeded automatically and can be changed via a SQL client or by 
 | Key          | Default |
 |--------------|---------|
 | `server_bin` | `/home/dipankardas/llama.cpp/build/bin/llama-server` |
-| `models_dir` | `/home/dipankardas/ws/vllm` |
 | `theme`      | `tokyonight` |
+
+Scan folders are stored in the `scan_dirs` table and managed from the TUI with `[e]`. On first run the legacy `models_dir` setting is migrated into `scan_dirs` automatically.
 
 ## Key bindings
 
@@ -53,10 +57,19 @@ Two settings are seeded automatically and can be changed via a SQL client or by 
 | Key | Action |
 |-----|--------|
 | `enter` | Select model |
-| `r` | Rescan models directory |
+| `e` | Explore / manage scan folders |
+| `r` | Rescan all scan folders |
 | `t` | Cycle theme |
 | `/` | Filter |
 | `q` / `ctrl+c` | Quit |
+
+### Explore (scan folders)
+| Key | Action |
+|-----|--------|
+| `a` | Add a new folder |
+| `d` / `delete` | Remove selected folder |
+| `↑` / `↓` | Navigate |
+| `esc` | Save changes and go back (triggers rescan) |
 
 ### Profile list
 | Key | Action |

@@ -38,13 +38,21 @@ func Open() (*DB, error) {
 func (d *DB) Close() { d.conn.Close() }
 
 func (d *DB) migrate() error {
+	// Add scan_dir column to models for existing databases — ignore error if already exists.
+	d.conn.Exec(`ALTER TABLE models ADD COLUMN scan_dir TEXT NOT NULL DEFAULT ''`)
+
 	_, err := d.conn.Exec(`
 CREATE TABLE IF NOT EXISTS models (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    scan_dir     TEXT NOT NULL DEFAULT '',
     dir_name     TEXT NOT NULL,
     gguf_path    TEXT NOT NULL UNIQUE,
     mmproj_path  TEXT NOT NULL DEFAULT '',
     display_name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scan_dirs (
+    path TEXT PRIMARY KEY
 );
 
 CREATE TABLE IF NOT EXISTS profiles (
@@ -77,8 +85,11 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 INSERT OR IGNORE INTO settings VALUES ('server_bin', '/home/dipankardas/llama.cpp/build/bin/llama-server');
-INSERT OR IGNORE INTO settings VALUES ('models_dir', '/home/dipankardas/ws/vllm');
 INSERT OR IGNORE INTO settings VALUES ('theme', 'tokyonight');
+
+-- migrate legacy models_dir into scan_dirs exactly once, then drop it
+INSERT OR IGNORE INTO scan_dirs SELECT value FROM settings WHERE key='models_dir' AND value != '';
+DELETE FROM settings WHERE key='models_dir';
 `)
 	return err
 }
@@ -94,15 +105,43 @@ func (d *DB) SetSetting(key, value string) error {
 	return err
 }
 
+func (d *DB) ListScanDirs() ([]string, error) {
+	rows, err := d.conn.Query(`SELECT path FROM scan_dirs ORDER BY path`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (d *DB) AddScanDir(path string) error {
+	_, err := d.conn.Exec(`INSERT OR IGNORE INTO scan_dirs VALUES (?)`, path)
+	return err
+}
+
+func (d *DB) RemoveScanDir(path string) error {
+	_, err := d.conn.Exec(`DELETE FROM scan_dirs WHERE path = ?`, path)
+	return err
+}
+
 func (d *DB) UpsertModel(m *model.ModelEntry) error {
 	res, err := d.conn.Exec(`
-INSERT INTO models (dir_name, gguf_path, mmproj_path, display_name)
-VALUES (?, ?, ?, ?)
+INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(gguf_path) DO UPDATE SET
+    scan_dir=excluded.scan_dir,
     dir_name=excluded.dir_name,
     mmproj_path=excluded.mmproj_path,
     display_name=excluded.display_name
-`, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName)
+`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName)
 	if err != nil {
 		return err
 	}
@@ -116,7 +155,7 @@ ON CONFLICT(gguf_path) DO UPDATE SET
 }
 
 func (d *DB) ListModels() ([]model.ModelEntry, error) {
-	rows, err := d.conn.Query(`SELECT id, dir_name, gguf_path, mmproj_path, display_name FROM models ORDER BY display_name`)
+	rows, err := d.conn.Query(`SELECT id, scan_dir, dir_name, gguf_path, mmproj_path, display_name FROM models ORDER BY display_name`)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +163,7 @@ func (d *DB) ListModels() ([]model.ModelEntry, error) {
 	var out []model.ModelEntry
 	for rows.Next() {
 		var m model.ModelEntry
-		if err := rows.Scan(&m.ID, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName); err != nil {
+		if err := rows.Scan(&m.ID, &m.ScanDir, &m.DirName, &m.GGUFPath, &m.MmprojPath, &m.DisplayName); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

@@ -19,7 +19,6 @@ func main() {
 	}
 	defer database.Close()
 
-	// Load saved theme before building any TUI styles.
 	if theme, err := database.GetSetting("theme"); err == nil && theme != "" {
 		tui.SetTheme(theme)
 	}
@@ -29,13 +28,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "setting server_bin: %v\n", err)
 		os.Exit(1)
 	}
-	modelsDir, err := database.GetSetting("models_dir")
+
+	scanDirs, err := database.ListScanDirs()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "setting models_dir: %v\n", err)
+		fmt.Fprintf(os.Stderr, "list scan dirs: %v\n", err)
 		os.Exit(1)
 	}
 
-	entries, err := scanner.Scan(modelsDir)
+	entries, err := scanner.Scan(scanDirs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "scan: %v\n", err)
 		os.Exit(1)
@@ -47,7 +47,7 @@ func main() {
 		}
 	}
 
-	app := tui.NewApp(database, serverBin, modelsDir, entries, 80, 24)
+	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24)
 	p := tea.NewProgram(app, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "tui: %v\n", err)
