@@ -12,6 +12,9 @@
 **Zero-management launch templates for [llama.cpp](https://github.com/ggerganov/llama.cpp).**  
 Create one-click runnable profiles, manage your inference engine and model locations simply, and monitor performance with live server logs.
 
+![profile config](profile-config.webp)
+![running model](runningmodel.webp)
+
 ## Features
 
 - **One-Click Launch** — Instant start with pre-configured, named profiles (e.g., `text-only`, `low-vram`).
