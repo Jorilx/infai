@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -200,10 +201,15 @@ func readAlignment(rs *readSeeker) (uint32, error) {
 	return uint32(align), nil
 }
 
+const maxStringLen = 1024 * 1024 // 1MB max string length
+
 func readString(rs *readSeeker) (string, error) {
 	len, err := readUint64(rs)
 	if err != nil {
 		return "", err
+	}
+	if len > maxStringLen {
+		return "", fmt.Errorf("string too large: %d", len)
 	}
 	data := make([]byte, len)
 	rs.Read(data)

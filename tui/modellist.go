@@ -9,10 +9,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/dipankardas011/infai/config"
 	"github.com/dipankardas011/infai/model"
 )
-
-const appVersion = "v0.4.0"
 
 const logoASCII = `
 ██╗███╗   ██╗███████╗ █████╗ ██╗
@@ -146,7 +145,7 @@ func (m ModelListModel) emptyView() string {
 	var sb strings.Builder
 	sb.WriteString(logoStyle.Render(logoASCII))
 	sb.WriteString("\n\n")
-	sb.WriteString(versionStyle.Render("  " + appVersion))
+	sb.WriteString(versionStyle.Render("  " + config.Version()))
 	sb.WriteString("\n\n")
 	sb.WriteString(hintStyle.Render("  no models found — press [f] to add scan folders"))
 	sb.WriteString("\n\n")

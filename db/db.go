@@ -2,11 +2,17 @@ package db
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/mattn/go-sqlite3"
 
+	"github.com/dipankardas011/infai/migrations"
 	"github.com/dipankardas011/infai/model"
 )
 
@@ -29,7 +35,7 @@ func Open() (*DB, error) {
 		return nil, err
 	}
 	d := &DB{conn: conn}
-	if err := d.migrate(); err != nil {
+	if err := d.runMigrations(); err != nil {
 		return nil, err
 	}
 	return d, nil
@@ -37,82 +43,67 @@ func Open() (*DB, error) {
 
 func (d *DB) Close() { d.conn.Close() }
 
-func (d *DB) migrate() error {
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN scan_dir TEXT NOT NULL DEFAULT ''`)
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN last_used DATETIME DEFAULT CURRENT_TIMESTAMP`)
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN checksum TEXT NOT NULL DEFAULT ''`)
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN last_verified DATETIME DEFAULT CURRENT_TIMESTAMP`)
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN architecture TEXT NOT NULL DEFAULT ''`)
-	d.conn.Exec(`ALTER TABLE models ADD COLUMN model_name TEXT NOT NULL DEFAULT ''`)
+func (d *DB) runMigrations() error {
+	m, err := newMigrate(d.conn)
+	if err != nil {
+		return fmt.Errorf("failed to create migrate: %w", err)
+	}
 
-	_, err := d.conn.Exec(`
-CREATE TABLE IF NOT EXISTS models (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_dir      TEXT NOT NULL DEFAULT '',
-    dir_name      TEXT NOT NULL,
-    gguf_path     TEXT NOT NULL UNIQUE,
-    mmproj_path   TEXT NOT NULL DEFAULT '',
-    display_name  TEXT NOT NULL,
-    last_used     DATETIME DEFAULT CURRENT_TIMESTAMP,
-    checksum      TEXT NOT NULL DEFAULT '',
-    last_verified DATETIME DEFAULT CURRENT_TIMESTAMP,
-    architecture TEXT NOT NULL DEFAULT '',
-    model_name    TEXT NOT NULL DEFAULT ''
-);
+	currentVersion, dirty, err := m.Version()
+	switch {
+	case err == nil:
+	case errors.Is(err, migrate.ErrNilVersion):
+		currentVersion = 0
+	default:
+		return fmt.Errorf("failed to get migration version: %w", err)
+	}
 
-CREATE TABLE IF NOT EXISTS scan_dirs (
-    path TEXT PRIMARY KEY
-);
+	if dirty {
+		return fmt.Errorf("database is in dirty state at version %d - manual intervention required", currentVersion)
+	}
 
-CREATE TABLE IF NOT EXISTS profiles (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
-    model_id         INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
-    name             TEXT NOT NULL,
-    port             INTEGER NOT NULL DEFAULT 8000,
-    host             TEXT NOT NULL DEFAULT '0.0.0.0',
-    context_size     INTEGER NOT NULL DEFAULT 65536,
-    ngl              TEXT NOT NULL DEFAULT 'auto',
-    batch_size       INTEGER,
-    ubatch_size      INTEGER,
-    cache_type_k     TEXT,
-    cache_type_v     TEXT,
-    flash_attn       INTEGER NOT NULL DEFAULT 0,
-    jinja            INTEGER NOT NULL DEFAULT 0,
-    temperature      REAL,
-    reasoning_budget INTEGER,
-    top_p            REAL,
-    top_k            INTEGER,
-    no_kv_offload    INTEGER NOT NULL DEFAULT 0,
-    use_mmproj       INTEGER NOT NULL DEFAULT 0,
-    extra_flags      TEXT NOT NULL DEFAULT '',
-    UNIQUE(model_id, name)
-);
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		if dirty {
+			_ = m.Down()
+			return fmt.Errorf("migration failed and rolled back: %w", err)
+		}
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
 
-CREATE TABLE IF NOT EXISTS recents (
-    model_id   INTEGER NOT NULL REFERENCES models(id) ON DELETE CASCADE,
-    profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-    last_used  DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (model_id, profile_id)
-);
+	newVersion, _, err := m.Version()
+	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
+		return fmt.Errorf("failed to get new migration version: %w", err)
+	}
 
-CREATE TABLE IF NOT EXISTS executors (
-    id              TEXT PRIMARY KEY,
-    path            TEXT NOT NULL,
-    is_default      INTEGER NOT NULL DEFAULT 0
-);
+	if newVersion > currentVersion {
+		fmt.Printf("migrated from version %d to %d\n", currentVersion, newVersion)
+	}
 
-CREATE TABLE IF NOT EXISTS settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
-
-INSERT OR IGNORE INTO settings VALUES ('theme', 'gruvbox');
-
--- migrate legacy models_dir into scan_dirs exactly once, then drop it
-INSERT OR IGNORE INTO scan_dirs SELECT value FROM settings WHERE key='models_dir' AND value != '';
-DELETE FROM settings WHERE key='models_dir';
-`)
+	_, err = d.conn.Exec(`
+		INSERT OR IGNORE INTO scan_dirs SELECT value FROM settings WHERE key='models_dir' AND value != '';
+		DELETE FROM settings WHERE key='models_dir';
+	`)
 	return err
+}
+
+func newMigrate(db *sql.DB) (*migrate.Migrate, error) {
+	d, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create migration source: %w", err)
+	}
+
+	driver, err := sqlite3.WithInstance(db, &sqlite3.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create database driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", d, "sqlite3", driver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create migrate instance: %w", err)
+	}
+
+	return m, nil
 }
 
 func (d *DB) GetSetting(key string) (string, error) {
@@ -177,6 +168,112 @@ ON CONFLICT(gguf_path) DO UPDATE SET
 		err = d.conn.QueryRow(`SELECT id FROM models WHERE gguf_path = ?`, m.GGUFPath).Scan(&m.ID)
 	}
 	return err
+}
+
+func (d *DB) Sync(scanned []model.ModelEntry) (int, int, error) {
+	var removed, updated int
+
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return 0, 0, err
+	}
+	defer tx.Rollback()
+
+	existing, err := tx.Query(`SELECT id, gguf_path, checksum FROM models`)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	dbModels := make(map[int64]map[string]string)
+	for existing.Next() {
+		var id int64
+		var path, checksum string
+		if err := existing.Scan(&id, &path, &checksum); err != nil {
+			existing.Close()
+			return 0, 0, err
+		}
+		dbModels[id] = map[string]string{"path": path, "checksum": checksum}
+	}
+	existing.Close()
+
+	scannedPaths := make(map[string]bool)
+	for _, m := range scanned {
+		scannedPaths[m.GGUFPath] = true
+	}
+
+	for id, info := range dbModels {
+		path := info["path"]
+
+		if _, exists := os.Stat(path); os.IsNotExist(exists) {
+			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			removed++
+			continue
+		}
+
+		found := false
+		for _, s := range scanned {
+			if s.GGUFPath == path {
+				found = true
+				if s.Checksum != info["checksum"] && s.Checksum != "" {
+					_, err := tx.Exec(`
+						UPDATE models SET checksum = ?, architecture = ?, model_name = ?, last_verified = CURRENT_TIMESTAMP
+						WHERE id = ?
+					`, s.Checksum, s.Architecture, s.ModelName, id)
+					if err != nil {
+						return 0, 0, err
+					}
+					updated++
+				}
+				break
+			}
+		}
+		if !found {
+			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
+			if err != nil {
+				return 0, 0, err
+			}
+			removed++
+		}
+	}
+
+	for _, m := range scanned {
+		if !scannedPaths[m.GGUFPath] {
+			continue
+		}
+		_, err := tx.Exec(`
+			INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(gguf_path) DO UPDATE SET
+				scan_dir=excluded.scan_dir,
+				dir_name=excluded.dir_name,
+				mmproj_path=excluded.mmproj_path,
+				display_name=excluded.display_name,
+				checksum=excluded.checksum,
+				architecture=excluded.architecture,
+				model_name=excluded.model_name,
+				last_verified=CURRENT_TIMESTAMP
+		`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName, m.Checksum, m.Architecture, m.ModelName)
+		if err != nil {
+			return 0, 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+
+	return removed, updated, nil
 }
 
 func (d *DB) ListModels() ([]model.ModelEntry, error) {
@@ -388,113 +485,6 @@ ON CONFLICT(model_id, name) DO UPDATE SET
 func (d *DB) DeleteProfile(id int64) error {
 	_, err := d.conn.Exec(`DELETE FROM profiles WHERE id = ?`, id)
 	return err
-}
-
-func (d *DB) Sync(scanned []model.ModelEntry) (int, int, error) {
-	var removed, updated int
-
-	tx, err := d.conn.Begin()
-	if err != nil {
-		return 0, 0, err
-	}
-	defer tx.Rollback()
-
-	existing, err := tx.Query(`SELECT id, gguf_path, checksum FROM models`)
-	if err != nil {
-		return 0, 0, err
-	}
-
-	dbModels := make(map[int64]map[string]string)
-	for existing.Next() {
-		var id int64
-		var path, checksum string
-		if err := existing.Scan(&id, &path, &checksum); err != nil {
-			existing.Close()
-			return 0, 0, err
-		}
-		dbModels[id] = map[string]string{"path": path, "checksum": checksum}
-	}
-	existing.Close()
-
-	scannedPaths := make(map[string]bool)
-	for _, m := range scanned {
-		scannedPaths[m.GGUFPath] = true
-	}
-
-	for id, info := range dbModels {
-		path := info["path"]
-		checksum := info["checksum"]
-
-		if _, exists := os.Stat(path); os.IsNotExist(exists) {
-			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
-			if err != nil {
-				return 0, 0, err
-			}
-			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
-			if err != nil {
-				return 0, 0, err
-			}
-			removed++
-			continue
-		}
-
-		found := false
-		for _, s := range scanned {
-			if s.GGUFPath == path {
-				found = true
-				if s.Checksum != checksum && s.Checksum != "" {
-					_, err := tx.Exec(`
-						UPDATE models SET checksum = ?, architecture = ?, model_name = ?, last_verified = CURRENT_TIMESTAMP
-						WHERE id = ?
-					`, s.Checksum, s.Architecture, s.ModelName, id)
-					if err != nil {
-						return 0, 0, err
-					}
-					updated++
-				}
-				break
-			}
-		}
-		if !found {
-			_, err := tx.Exec(`DELETE FROM models WHERE id = ?`, id)
-			if err != nil {
-				return 0, 0, err
-			}
-			_, err = tx.Exec(`DELETE FROM recents WHERE model_id = ?`, id)
-			if err != nil {
-				return 0, 0, err
-			}
-			removed++
-		}
-	}
-
-	for _, m := range scanned {
-		if !scannedPaths[m.GGUFPath] {
-			continue
-		}
-		_, err := tx.Exec(`
-			INSERT INTO models (scan_dir, dir_name, gguf_path, mmproj_path, display_name, checksum, architecture, model_name)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-			ON CONFLICT(gguf_path) DO UPDATE SET
-				scan_dir=excluded.scan_dir,
-				dir_name=excluded.dir_name,
-				mmproj_path=excluded.mmproj_path,
-				display_name=excluded.display_name,
-				checksum=excluded.checksum,
-				architecture=excluded.architecture,
-				model_name=excluded.model_name,
-				last_verified=CURRENT_TIMESTAMP
-		`, m.ScanDir, m.DirName, m.GGUFPath, m.MmprojPath, m.DisplayName, m.Checksum, m.Architecture, m.ModelName)
-		if err != nil {
-			return 0, 0, err
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return 0, 0, err
-	}
-
-	return removed, updated, nil
 }
 
 func scanProfile(rows *sql.Rows) (model.Profile, error) {
