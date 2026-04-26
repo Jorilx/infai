@@ -12,9 +12,6 @@
 **Zero-management launch templates for [llama.cpp](https://github.com/ggerganov/llama.cpp).**  
 Simplify configuration management and run local models faster. Perfect for rapid experimentation and testing without the need to remember complex shell commands.
 
-![profile config](profile-config.webp)
-![running model](runningmodel.webp)
-
 ## Features
 
 - **One-Click Launch** — Instant start with pre-configured profiles. No more memorizing long CLI commands.

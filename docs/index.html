@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>infai — Zero-management local LLM launcher</title>
-  <meta name="description" content="Stop wrestling with CLI flags. infai auto-detects, configures, and launches local LLMs from a terminal UI.">
-  <meta property="og:title" content="infai — Zero-management local LLM launcher">
-  <meta property="og:description" content="Auto-detect models, create launch profiles, and run local LLMs without memorizing shell commands.">
+  <title>infai — Lightweight local LLM launcher</title>
+  <meta name="description" content="A lightweight, simple terminal UI for local LLM inference. Auto-detect GGUF models, save profiles, and launch fast.">
+  <meta property="og:title" content="infai — Lightweight local LLM launcher">
+  <meta property="og:description" content="A lightweight, simple terminal UI to auto-detect models, save launch profiles, and run local inference without flag soup.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://infai.dipankar-das.com">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -51,8 +51,8 @@
       </h1>
       <p class="hero-sub reveal-up" style="--d:3">
         infai auto-detects your GGUF models, wraps llama.cpp in a terminal UI,
-        and lets you launch inference servers with one keypress.<br>
-        No flags to memorize. No YAML. No scripts.
+        and launches inference servers with one keypress.<br>
+        Lightweight. Simple. No flag soup, YAML sprawl, or shell scripts.
       </p>
       <div class="hero-actions reveal-up" style="--d:4">
         <a href="#install" class="btn-primary">
@@ -125,7 +125,7 @@
       <div class="showcase-text">
         <span class="showcase-num">01</span>
         <h3>Configure once,<br>launch forever</h3>
-        <p>Name your profile, set context size, GPU layers, batch parameters, flash attention, quantization type. Save it. Never think about it again.</p>
+        <p>Name your profile, set context size, GPU layers, batch parameters, flash attention, quantization type. Save it once and relaunch in seconds.</p>
       </div>
       <div class="showcase-img">
         <div class="img-frame">
@@ -137,7 +137,7 @@
       <div class="showcase-text">
         <span class="showcase-num">02</span>
         <h3>Watch inference<br>happen live</h3>
-        <p>Built-in scrollable viewport streams server output in real-time. Stop, restart, or switch models without leaving the TUI.</p>
+        <p>Built-in viewport streams logs plus system/model metrics in real-time. Stop, restart, or switch models without leaving the TUI.</p>
       </div>
       <div class="showcase-img">
         <div class="img-frame">
@@ -156,39 +156,46 @@
       <div class="feat reveal-up" style="--d:0">
         <span class="feat-marker">//</span>
         <div>
+          <h3>Lightweight by design</h3>
+          <p>Minimal dependencies, terminal-native UX, and fast startup. infai stays out of your way and keeps local inference simple.</p>
+        </div>
+      </div>
+      <div class="feat reveal-up" style="--d:1">
+        <span class="feat-marker">//</span>
+        <div>
           <h3>Auto-detection</h3>
           <p>Point at your model directories. infai scans for GGUF files and indexes them. New model? Just rescan.</p>
         </div>
       </div>
-      <div class="feat reveal-up" style="--d:1">
+      <div class="feat reveal-up" style="--d:2">
         <span class="feat-marker">//</span>
         <div>
           <h3>Reusable profiles</h3>
           <p>Multiple configs per model. Compare Q4_K_M vs Q5_K_S, or 4K vs 64K context, in seconds flat.</p>
         </div>
       </div>
-      <div class="feat reveal-up" style="--d:2">
+      <div class="feat reveal-up" style="--d:3">
         <span class="feat-marker">//</span>
         <div>
-          <h3>Live inference logs</h3>
-          <p>Real-time scrollable viewport. No more tmux splits or tail -f in another window.</p>
+          <h3>Live logs + metrics</h3>
+          <p>Real-time viewport with process and system stats. No tmux splits, no tail -f, no second monitor needed.</p>
         </div>
       </div>
-      <div class="feat reveal-up" style="--d:3">
+      <div class="feat reveal-up" style="--d:4">
         <span class="feat-marker">//</span>
         <div>
           <h3>Terminal themes</h3>
           <p>Tokyonight, Everforest, One Dark, Rose Pine, Gruvbox. Match your terminal's vibe.</p>
         </div>
       </div>
-      <div class="feat reveal-up" style="--d:4">
+      <div class="feat reveal-up" style="--d:5">
         <span class="feat-marker">//</span>
         <div>
           <h3>SQLite config</h3>
           <p>One database. No scattered dotfiles, no YAML, no env vars. Everything in one place.</p>
         </div>
       </div>
-      <div class="feat reveal-up" style="--d:5">
+      <div class="feat reveal-up" style="--d:6">
         <span class="feat-marker">//</span>
         <div>
           <h3>One-key launch</h3>
@@ -254,7 +261,8 @@
     <p class="roadmap-sub reveal-up">llama.cpp today. Your single control plane for all local inference tomorrow.</p>
     <div class="roadmap-timeline">
       <div class="roadmap-line" aria-hidden="true"></div>
-      <div class="roadmap-node done reveal-up" style="--d:0">
+
+      <div class="roadmap-node done reveal-up" style="--d:1">
         <div class="node-dot"></div>
         <div class="node-content">
           <span class="node-status">shipped</span>
@@ -262,7 +270,17 @@
           <p>GGUF auto-detect, launch profiles, live logs, 5 themes</p>
         </div>
       </div>
-      <div class="roadmap-node next reveal-up" style="--d:1">
+
+      <div class="roadmap-node done reveal-up" style="--d:0">
+        <div class="node-dot"></div>
+        <div class="node-content">
+          <span class="node-status">shipped</span>
+          <h3>Resource monitoring</h3>
+          <p>Live system and model CPU, memory, and GPU telemetry in the run screen</p>
+        </div>
+      </div>
+
+      <div class="roadmap-node next reveal-up" style="--d:2">
         <div class="node-dot"></div>
         <div class="node-content">
           <span class="node-status">next</span>
@@ -270,20 +288,12 @@
           <p>HuggingFace SafeTensors and Apple MLX architectures</p>
         </div>
       </div>
-      <div class="roadmap-node next reveal-up" style="--d:2">
+      <div class="roadmap-node next reveal-up" style="--d:3">
         <div class="node-dot"></div>
         <div class="node-content">
           <span class="node-status">next</span>
           <h3>vLLM backend</h3>
           <p>Production-grade batched inference management</p>
-        </div>
-      </div>
-      <div class="roadmap-node next reveal-up" style="--d:3">
-        <div class="node-dot"></div>
-        <div class="node-content">
-          <span class="node-status">planned</span>
-          <h3>Resource monitoring</h3>
-          <p>Live CPU, memory, GPU utilization in the TUI</p>
         </div>
       </div>
     </div>
