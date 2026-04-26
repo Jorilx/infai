@@ -598,6 +598,8 @@ func (a *AppModel) helpView() string {
 		helpContent = a.help.View(keys.Server)
 	case screenExplore:
 		helpContent = a.help.View(keys.Explore)
+	case screenExecutor:
+		helpContent = a.help.View(keys.Executor)
 	default:
 		return ""
 	}

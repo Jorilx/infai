@@ -23,11 +23,11 @@ func (k homeKeyMap) FullHelp() [][]key.Binding {
 }
 
 type modelListKeyMap struct {
-	Enter   key.Binding
-	Rescan  key.Binding
-	Filter  key.Binding
-	Back    key.Binding
-	Help    key.Binding
+	Enter  key.Binding
+	Rescan key.Binding
+	Filter key.Binding
+	Back   key.Binding
+	Help   key.Binding
 }
 
 func (k modelListKeyMap) ShortHelp() []key.Binding {
@@ -69,7 +69,7 @@ type confirmKeyMap struct {
 	Help   key.Binding
 }
 
-func (k confirmKeyMap) ShortHelp() []key.Binding { return []key.Binding{k.Launch, k.Back, k.Help} }
+func (k confirmKeyMap) ShortHelp() []key.Binding  { return []key.Binding{k.Launch, k.Back, k.Help} }
 func (k confirmKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
 type serverKeyMap struct {
@@ -79,8 +79,23 @@ type serverKeyMap struct {
 	Help  key.Binding
 }
 
-func (k serverKeyMap) ShortHelp() []key.Binding { return []key.Binding{k.Stop, k.Clear, k.Back, k.Help} }
+func (k serverKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Stop, k.Clear, k.Back, k.Help}
+}
 func (k serverKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
+
+type executorKeyMap struct {
+	Enter key.Binding
+	Add   key.Binding
+	Del   key.Binding
+	Back  key.Binding
+	Help  key.Binding
+}
+
+func (k executorKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Enter, k.Add, k.Del, k.Back, k.Help}
+}
+func (k executorKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
 var keys = struct {
 	Home        homeKeyMap
@@ -89,6 +104,7 @@ var keys = struct {
 	ProfileList profileListKeyMap
 	Confirm     confirmKeyMap
 	Server      serverKeyMap
+	Executor    executorKeyMap
 }{
 	Home: homeKeyMap{
 		Enter:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
@@ -129,6 +145,13 @@ var keys = struct {
 		Stop:  key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
 		Clear: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear logs")),
 		Back:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop & back")),
+		Help:  key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	},
+	Executor: executorKeyMap{
+		Enter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "set default")),
+		Add:   key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
+		Del:   key.NewBinding(key.WithKeys("d", "delete"), key.WithHelp("d", "use detected")),
+		Back:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "save & back")),
 		Help:  key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	},
 }

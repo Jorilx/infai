@@ -165,7 +165,6 @@ func (m ExecutorModel) View() string {
 	titleStyle := lipgloss.NewStyle().Foreground(t.Primary).Bold(true).Padding(0, 1)
 	mutedStyle := lipgloss.NewStyle().Foreground(t.Muted)
 	selStyle := lipgloss.NewStyle().Foreground(t.Primary).Bold(true)
-	helpStyle := lipgloss.NewStyle().Foreground(t.Muted).Italic(true)
 	errStyle := lipgloss.NewStyle().Foreground(t.Error)
 	defStyle := lipgloss.NewStyle().Foreground(t.Success).Bold(true)
 
@@ -198,12 +197,10 @@ func (m ExecutorModel) View() string {
 		sb.WriteString(mutedStyle.Render("add executor:") + "\n")
 		sb.WriteString(fmt.Sprintf("  Type: < %s >\n", selStyle.Render(typeStr)))
 		sb.WriteString(fmt.Sprintf("  Path: %s\n", m.input.View()))
-		sb.WriteString("\n" + helpStyle.Render("enter: confirm  ←/→: cycle type  esc: cancel"))
 	} else {
 		if m.errMsg != "" {
 			sb.WriteString(errStyle.Render("  "+m.errMsg) + "\n")
 		}
-		sb.WriteString(helpStyle.Render("enter: set default  a: add  d: use detected  esc: save & back"))
 	}
 
 	content := sb.String()
