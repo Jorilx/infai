@@ -52,7 +52,8 @@ type ServerModel struct {
 	modelName   string
 	host        string
 	port        int
-	metrics     string
+	systemUsage string
+	modelUsage  string
 	startedAt   time.Time
 	stopped     bool
 	stopping    bool
@@ -115,7 +116,7 @@ func NewServerModel(args []string, profileName, modelName, host string, port, w,
 		height:      h,
 		initialized: true,
 	}
-	return m, tea.Batch(listenForLog(logCh, exitCh), getMetricsCmd()), nil
+	return m, tea.Batch(listenForLog(logCh, exitCh), getMetricsCmd(cmd.Process.Pid)), nil
 }
 
 func (s ServerModel) HandleLogLine(line string) (ServerModel, tea.Cmd) {
@@ -179,13 +180,17 @@ func (s ServerModel) Update(msg tea.Msg) (ServerModel, tea.Cmd) {
 		if s.stopped {
 			return s, nil
 		}
-		s.metrics = msg.Metrics
+		s.systemUsage = msg.System
+		s.modelUsage = msg.Model
 		return s, tickMetrics()
 	case tickMetricsMsg:
 		if s.stopped {
 			return s, nil
 		}
-		return s, getMetricsCmd()
+		if s.cmd == nil || s.cmd.Process == nil {
+			return s, nil
+		}
+		return s, getMetricsCmd(s.cmd.Process.Pid)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "c":
@@ -222,12 +227,16 @@ func (s ServerModel) View() string {
 		uptime = styleMuted.Render("  up:" + time.Since(s.startedAt).Truncate(time.Second).String())
 	}
 	endpoint := styleKey.Render(fmt.Sprintf("  endpoint:http://%s:%d/v1", s.host, s.port))
-	metrics := ""
-	if s.metrics != "" {
-		metrics = "\n" + styleMuted.Render("  ") + lipgloss.NewStyle().Foreground(t.Secondary).Render(s.metrics)
+	systemLine := ""
+	if s.systemUsage != "" {
+		systemLine = "\n" + styleMuted.Render("  system: ") + lipgloss.NewStyle().Foreground(t.Secondary).Render(s.systemUsage)
+	}
+	modelLine := ""
+	if s.modelUsage != "" {
+		modelLine = "\n" + styleMuted.Render("  model:  ") + lipgloss.NewStyle().Foreground(t.Primary).Render(s.modelUsage)
 	}
 	header := styleTitle.Render(s.profileName) + "  " + status + pid + uptime + endpoint +
-		"\n" + styleMuted.Render("  model: "+s.modelName) + metrics
+		"\n" + styleMuted.Render("  serving: "+s.modelName) + systemLine + modelLine
 
 	// Log viewport
 	logView := s.vp.View()
