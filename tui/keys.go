@@ -88,14 +88,16 @@ func (k confirmKeyMap) ShortHelp() []key.Binding  { return []key.Binding{k.Launc
 func (k confirmKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
 type serverKeyMap struct {
-	Stop  key.Binding
-	Clear key.Binding
-	Back  key.Binding
-	Help  key.Binding
+	Stop     key.Binding
+	Restart  key.Binding
+	Clear    key.Binding
+	Back     key.Binding
+	BackStop key.Binding
+	Help     key.Binding
 }
 
 func (k serverKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Stop, k.Clear, k.Back, k.Help}
+	return []key.Binding{k.Stop, k.Clear, k.BackStop, k.Help}
 }
 func (k serverKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
@@ -167,10 +169,12 @@ var keys = struct {
 		Help:   key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	},
 	Server: serverKeyMap{
-		Stop:  key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
-		Clear: key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear logs")),
-		Back:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop & back")),
-		Help:  key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+		Stop:     key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "stop")),
+		Restart:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "restart")),
+		Clear:    key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "clear logs")),
+		Back:     key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+		BackStop: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "stop & back")),
+		Help:     key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 	},
 	Executor: executorKeyMap{
 		Enter: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "set default")),

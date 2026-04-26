@@ -44,17 +44,21 @@ const maxLogLines = 10000
 // ServerModel is screen 5 — shows live llama-server output.
 type ServerModel struct {
 	cmd         *exec.Cmd
+	launchArgs  []string
 	logCh       chan string
 	exitCh      chan error
 	logs        []string
 	vp          viewport.Model
 	profileName string
 	modelName   string
+	modelType   string
+	contextSize int
 	host        string
 	port        int
 	systemUsage string
 	modelUsage  string
 	startedAt   time.Time
+	stoppedAt   time.Time
 	stopped     bool
 	stopping    bool
 	forceKilled bool
@@ -65,7 +69,7 @@ type ServerModel struct {
 }
 
 // NewServerModel starts the server process and returns the model + initial listen cmd.
-func NewServerModel(args []string, profileName, modelName, host string, port, w, h int) (ServerModel, tea.Cmd, error) {
+func NewServerModel(args []string, profileName, modelName, modelType string, contextSize int, host string, port, w, h int) (ServerModel, tea.Cmd, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 
 	pr, pw := io.Pipe()
@@ -104,11 +108,14 @@ func NewServerModel(args []string, profileName, modelName, host string, port, w,
 
 	m := ServerModel{
 		cmd:         cmd,
+		launchArgs:  append([]string(nil), args...),
 		logCh:       logCh,
 		exitCh:      exitCh,
 		vp:          vp,
 		profileName: profileName,
 		modelName:   modelName,
+		modelType:   modelType,
+		contextSize: contextSize,
 		host:        host,
 		port:        port,
 		startedAt:   time.Now(),
@@ -141,7 +148,20 @@ func (s ServerModel) SetExited(err error) ServerModel {
 	s.stopped = true
 	s.stopping = false
 	s.exitErr = err
+	if s.stoppedAt.IsZero() {
+		s.stoppedAt = time.Now()
+	}
 	return s
+}
+
+func (s ServerModel) Restart() (ServerModel, tea.Cmd, error) {
+	if !s.stopped || s.stopping {
+		return s, nil, fmt.Errorf("server is not stopped")
+	}
+	if len(s.launchArgs) == 0 {
+		return s, nil, fmt.Errorf("missing launch command")
+	}
+	return NewServerModel(s.launchArgs, s.profileName, s.modelName, s.modelType, s.contextSize, s.host, s.port, s.width, s.height)
 }
 
 func (s ServerModel) Stop() (ServerModel, tea.Cmd) {
@@ -224,7 +244,11 @@ func (s ServerModel) View() string {
 	}
 	uptime := ""
 	if !s.startedAt.IsZero() {
-		uptime = styleMuted.Render("  up:" + time.Since(s.startedAt).Truncate(time.Second).String())
+		end := time.Now()
+		if s.stopped && !s.stoppedAt.IsZero() {
+			end = s.stoppedAt
+		}
+		uptime = styleMuted.Render("  up:" + end.Sub(s.startedAt).Truncate(time.Second).String())
 	}
 	endpoint := styleKey.Render(fmt.Sprintf("  endpoint:http://%s:%d/v1", s.host, s.port))
 	systemLine := ""
@@ -235,8 +259,16 @@ func (s ServerModel) View() string {
 	if s.modelUsage != "" {
 		modelLine = "\n" + styleMuted.Render("  model:  ") + lipgloss.NewStyle().Foreground(t.Primary).Render(s.modelUsage)
 	}
+	servingMeta := ""
+	if s.modelType != "" && s.contextSize > 0 {
+		servingMeta = styleMuted.Render(fmt.Sprintf("  type:%s  ctx:%d", s.modelType, s.contextSize))
+	} else if s.modelType != "" {
+		servingMeta = styleMuted.Render("  type:" + s.modelType)
+	} else if s.contextSize > 0 {
+		servingMeta = styleMuted.Render(fmt.Sprintf("  ctx:%d", s.contextSize))
+	}
 	header := styleTitle.Render(s.profileName) + "  " + status + pid + uptime + endpoint +
-		"\n" + styleMuted.Render("  serving: "+s.modelName) + systemLine + modelLine
+		"\n" + styleMuted.Render("  serving: "+s.modelName) + servingMeta + systemLine + modelLine
 
 	// Log viewport
 	logView := s.vp.View()

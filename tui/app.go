@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -484,6 +485,8 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			args,
 			a.selectedProfile.Name,
 			a.selectedModel.DisplayName,
+			a.selectedModel.Type,
+			a.selectedProfile.ContextSize,
 			a.selectedProfile.Host,
 			a.selectedProfile.Port,
 			a.width,
@@ -505,10 +508,29 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
+		if a.server.stopped || a.server.stopping {
+			return a, nil
+		}
 		var cmd tea.Cmd
 		a.server, cmd = a.server.Stop()
 		return a, cmd
+	case "r":
+		if !a.server.stopped || a.server.stopping {
+			return a, nil
+		}
+		sm, cmd, err := a.server.Restart()
+		if err != nil {
+			a.setErr(err.Error())
+			return a, nil
+		}
+		a.server = sm
+		return a, cmd
 	case "esc":
+		if a.server.stopped {
+			a.refreshHome()
+			a.screen = screenHome
+			return a, nil
+		}
 		var cmd tea.Cmd
 		a.server, cmd = a.server.Stop()
 		a.refreshHome()
@@ -598,7 +620,7 @@ func (a *AppModel) helpView() string {
 	case screenConfirm:
 		helpContent = a.help.View(keys.Confirm)
 	case screenServerRunning:
-		helpContent = a.help.View(keys.Server)
+		helpContent = a.serverHelpView()
 	case screenExplore:
 		if a.explore.AddingBrowse() {
 			helpContent = a.help.View(keys.FileBrowser)
@@ -623,4 +645,17 @@ func (a *AppModel) helpView() string {
 	a.help.Styles.FullSeparator = lipgloss.NewStyle().Foreground(t.Muted)
 
 	return lipgloss.Place(a.width, 1, lipgloss.Center, lipgloss.Center, helpContent)
+}
+
+func (a *AppModel) serverHelpView() string {
+	if a.showFullHelp {
+		if a.server.stopped {
+			return a.help.FullHelpView([][]key.Binding{{keys.Server.Restart, keys.Server.Clear}, {keys.Server.Back, keys.Server.Help}})
+		}
+		return a.help.FullHelpView([][]key.Binding{{keys.Server.Stop, keys.Server.Clear}, {keys.Server.BackStop, keys.Server.Help}})
+	}
+	if a.server.stopped {
+		return a.help.ShortHelpView([]key.Binding{keys.Server.Restart, keys.Server.Clear, keys.Server.Back, keys.Server.Help})
+	}
+	return a.help.ShortHelpView([]key.Binding{keys.Server.Stop, keys.Server.Clear, keys.Server.BackStop, keys.Server.Help})
 }
