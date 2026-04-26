@@ -5,7 +5,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
@@ -17,16 +16,16 @@ type ExecutorSavedMsg struct{ Bin string }
 var supportedExecutors = []string{"llamacpp"}
 
 type ExecutorModel struct {
-	database  *db.DB
-	executors []db.Executor
-	cursor    int
-	detected  string
-	adding    bool
-	input     textinput.Model
-	typeIdx   int
-	errMsg    string
-	width     int
-	height    int
+	database     *db.DB
+	executors    []db.Executor
+	cursor       int
+	detected     string
+	addingBrowse bool
+	fileBrowser  FileBrowserModel
+	typeIdx      int
+	errMsg       string
+	width        int
+	height       int
 }
 
 func NewExecutorModel(database *db.DB, current string, w, h int) ExecutorModel {
@@ -36,10 +35,6 @@ func NewExecutorModel(database *db.DB, current string, w, h int) ExecutorModel {
 	if path, err := exec.LookPath("llama-server"); err == nil {
 		detected = path
 	}
-
-	ti := textinput.New()
-	ti.Placeholder = "/path/to/llama-server"
-	ti.CharLimit = 512
 
 	curIdx := 0
 	for i, e := range executors {
@@ -54,7 +49,6 @@ func NewExecutorModel(database *db.DB, current string, w, h int) ExecutorModel {
 		executors: executors,
 		cursor:    curIdx,
 		detected:  detected,
-		input:     ti,
 		width:     w,
 		height:    h,
 	}
@@ -62,56 +56,52 @@ func NewExecutorModel(database *db.DB, current string, w, h int) ExecutorModel {
 
 func (m ExecutorModel) SetSize(w, h int) ExecutorModel {
 	m.width, m.height = w, h
+	m.fileBrowser = m.fileBrowser.SetSize(w, h)
 	return m
 }
 
+func (m ExecutorModel) AddingBrowse() bool { return m.addingBrowse }
+
 func (m ExecutorModel) Update(msg tea.Msg) (ExecutorModel, tea.Cmd) {
-	if m.adding {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "enter":
-				id := supportedExecutors[m.typeIdx]
-				path := strings.TrimSpace(m.input.Value())
-				if path == "" {
-					m.errMsg = "path required"
-					return m, nil
-				}
-
-				absPath, err := expandPath(path)
-				if err != nil {
-					m.errMsg = "bad path: " + err.Error()
-					return m, nil
-				}
-
-				// If this is the first executor, make it default
-				isDefault := len(m.executors) == 0
-
-				err = m.database.UpsertExecutor(db.Executor{
-					ID:        id,
-					Path:      absPath,
-					IsDefault: isDefault,
-				})
-				if err != nil {
-					m.errMsg = err.Error()
-					return m, nil
-				}
-
-				m.adding = false
-				m.input.SetValue("")
-				m.executors, _ = m.database.ListExecutors()
-				return m, nil
-			case "esc":
-				m.adding = false
-				return m, nil
-			case "left":
-				m.typeIdx = (m.typeIdx - 1 + len(supportedExecutors)) % len(supportedExecutors)
-			case "right":
-				m.typeIdx = (m.typeIdx + 1) % len(supportedExecutors)
+	if m.addingBrowse {
+		var cmd tea.Cmd
+		m.fileBrowser, cmd = m.fileBrowser.Update(msg)
+		if _, ok := msg.(tea.KeyMsg); ok {
+			switch msg.(type) {
+			case FileBrowserSavedMsg:
+			default:
+				return m, cmd
 			}
 		}
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
+		if fm, ok := msg.(FileBrowserSavedMsg); ok {
+			m.addingBrowse = false
+			if fm.Path == "" {
+				return m, nil
+			}
+			path := fm.Path
+
+			id := supportedExecutors[m.typeIdx]
+			absPath, err := expandPath(path)
+			if err != nil {
+				m.errMsg = "bad path: " + err.Error()
+				return m, nil
+			}
+
+			isDefault := len(m.executors) == 0
+
+			err = m.database.UpsertExecutor(db.Executor{
+				ID:        id,
+				Path:      absPath,
+				IsDefault: isDefault,
+			})
+			if err != nil {
+				m.errMsg = err.Error()
+				return m, nil
+			}
+
+			m.executors, _ = m.database.ListExecutors()
+			m.errMsg = styleSuccess.Render("✓ added " + id)
+		}
 		return m, cmd
 	}
 
@@ -127,10 +117,10 @@ func (m ExecutorModel) Update(msg tea.Msg) (ExecutorModel, tea.Cmd) {
 				m.cursor++
 			}
 		case "a":
-			m.adding = true
+			m.addingBrowse = true
 			m.errMsg = ""
-			m.input.Focus()
-			return m, textinput.Blink
+			m.fileBrowser = NewFileBrowserModel().SetSize(m.width, m.height).SetSelectFile(true)
+			return m, nil
 		case "enter":
 			if len(m.executors) > 0 {
 				id := m.executors[m.cursor].ID
@@ -192,14 +182,15 @@ func (m ExecutorModel) View() string {
 	}
 
 	sb.WriteString("\n")
-	if m.adding {
-		typeStr := supportedExecutors[m.typeIdx]
-		sb.WriteString(mutedStyle.Render("add executor:") + "\n")
-		sb.WriteString(fmt.Sprintf("  Type: < %s >\n", selStyle.Render(typeStr)))
-		sb.WriteString(fmt.Sprintf("  Path: %s\n", m.input.View()))
+	if m.addingBrowse {
+		return m.fileBrowser.View()
 	} else {
 		if m.errMsg != "" {
-			sb.WriteString(errStyle.Render("  "+m.errMsg) + "\n")
+			if strings.HasPrefix(m.errMsg, "\x1b[") || strings.HasPrefix(m.errMsg, "✓") {
+				sb.WriteString(m.errMsg + "\n")
+			} else {
+				sb.WriteString(errStyle.Render("  "+m.errMsg) + "\n")
+			}
 		}
 	}
 

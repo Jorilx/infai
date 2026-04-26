@@ -605,7 +605,11 @@ func (a *AppModel) helpView() string {
 			helpContent = a.help.View(keys.Explore)
 		}
 	case screenExecutor:
-		helpContent = a.help.View(keys.Executor)
+		if a.executor.AddingBrowse() {
+			helpContent = a.help.View(keys.FileBrowser)
+		} else {
+			helpContent = a.help.View(keys.Executor)
+		}
 	default:
 		return ""
 	}

@@ -57,10 +57,11 @@ type fileBrowserKeyMap struct {
 	Open   key.Binding
 	Home   key.Binding
 	Select key.Binding
+	Filter key.Binding
 }
 
 func (k fileBrowserKeyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Back, k.Open, k.Home, k.Select}
+	return []key.Binding{k.Up, k.Down, k.Back, k.Open, k.Home, k.Select, k.Filter}
 }
 func (k fileBrowserKeyMap) FullHelp() [][]key.Binding { return [][]key.Binding{k.ShortHelp()} }
 
@@ -148,9 +149,10 @@ var keys = struct {
 		Up:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "nav")),
 		Down:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "nav")),
 		Back:   key.NewBinding(key.WithKeys("left", "backspace", "b"), key.WithHelp("←", "back")),
-		Open:   key.NewBinding(key.WithKeys("right", "/"), key.WithHelp("→", "open")),
+		Open:   key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "open")),
 		Home:   key.NewBinding(key.WithKeys("home"), key.WithHelp("home", "home")),
 		Select: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "select")),
+		Filter: key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 	},
 	ProfileList: profileListKeyMap{
 		Enter:  key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "launch")),
