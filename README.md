@@ -30,6 +30,12 @@ Simplify configuration management and run local models faster. Perfect for rapid
 brew install dipankardas011/tap/infai
 ```
 
+### Script Install (Linux)
+
+```bash
+curl -sL https://raw.githubusercontent.com/dipankardas011/infai/main/install.sh | bash
+```
+
 ### Download Binary
 
 Grab a pre-built binary from the [Releases](https://github.com/dipankardas011/infai/releases) page.

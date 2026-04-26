@@ -493,26 +493,23 @@ nav {
 
 .install-options {
   display: grid;
-  grid-template-columns: 1.2fr 1fr;
-  gap: 2rem;
-}
-.install-primary {
-  background: var(--bg-elevated);
-  border: 1px solid var(--amber);
-  border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 0 50px var(--amber-dim);
-}
-.install-alt {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
 }
-.install-row {
+.install-card {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 1.5rem;
+  padding: 1.75rem;
+}
+.install-featured {
+  border-color: var(--amber);
+  box-shadow: 0 0 50px var(--amber-dim);
+}
+.install-row-p {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-top: 0.5rem;
 }
 .install-method {
   font-family: var(--mono);
@@ -534,8 +531,9 @@ nav {
 }
 .install-cmd {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 0.75rem;
   background: rgba(0,0,0,0.4);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -548,6 +546,10 @@ nav {
   font-family: var(--mono);
   font-size: 0.82rem;
   color: var(--amber);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  white-space: pre-wrap;
 }
 .install-cmd-sm code { font-size: 0.75rem; }
 .install-copy {

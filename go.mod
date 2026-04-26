@@ -8,6 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/golang-migrate/migrate/v4 v4.18.0
 	github.com/mattn/go-sqlite3 v1.14.42
+	github.com/shirou/gopsutil/v4 v4.26.3
 )
 
 require (
@@ -36,7 +37,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.1 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect

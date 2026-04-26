@@ -264,7 +264,7 @@
   <section class="install" id="install">
     <h2 class="reveal-up">Get it</h2>
     <div class="install-options">
-      <div class="install-primary reveal-up">
+      <div class="install-card install-featured reveal-up">
         <div class="install-method">Homebrew <span class="install-tag">recommended</span></div>
         <div class="install-cmd" onclick="copyInstall(this, 'brew install dipankardas011/tap/infai')">
           <code>brew install dipankardas011/tap/infai</code>
@@ -272,19 +272,25 @@
         </div>
         <p class="install-note">macOS &amp; Linux. Pre-compiled. Zero dependencies.</p>
       </div>
-      <div class="install-alt reveal-up">
-        <div class="install-row">
-          <div class="install-method">Binary</div>
-          <p>Grab from <a href="https://github.com/dipankardas011/infai/releases" target="_blank" rel="noopener">GitHub Releases</a> &mdash; linux &amp; macOS, amd64 &amp; arm64.</p>
+      <div class="install-card install-featured reveal-up">
+        <div class="install-method">Install script</div>
+        <div class="install-cmd" onclick="copyInstall(this, 'curl -sL https://raw.githubusercontent.com/dipankardas011/infai/main/install.sh | bash')">
+          <code>curl -sL https://raw.githubusercontent.com/dipankardas011/infai/main/install.sh | bash</code>
+          <span class="install-copy">copy</span>
         </div>
-        <div class="install-row">
-          <div class="install-method">From source</div>
-          <div class="install-cmd install-cmd-sm" onclick="copyInstall(this, 'go install github.com/dipankardas011/infai@latest')">
-            <code>go install github.com/dipankardas011/infai@latest</code>
-            <span class="install-copy">copy</span>
-          </div>
-          <p class="install-note">Requires Go 1.23+ and a C compiler (SQLite).</p>
+        <p class="install-note">Linux. Installs to /usr/local/bin. One-liner.</p>
+      </div>
+      <div class="install-card reveal-up">
+        <div class="install-method">Binary</div>
+        <p class="install-row-p">Grab from <a href="https://github.com/dipankardas011/infai/releases" target="_blank" rel="noopener">GitHub Releases</a> &mdash; linux &amp; macOS, amd64 &amp; arm64.</p>
+      </div>
+      <div class="install-card reveal-up">
+        <div class="install-method">From source</div>
+        <div class="install-cmd install-cmd-sm" onclick="copyInstall(this, 'go install github.com/dipankardas011/infai@latest')">
+          <code>go install github.com/dipankardas011/infai@latest</code>
+          <span class="install-copy">copy</span>
         </div>
+        <p class="install-note">Requires Go 1.23+ and a C compiler (SQLite).</p>
       </div>
     </div>
   </section>
