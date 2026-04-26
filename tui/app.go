@@ -1,12 +1,22 @@
 package tui
 
 import (
+	"time"
+
+	"github.com/charmbracelet/bubbles/help"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/dipankardas011/infai/db"
 	"github.com/dipankardas011/infai/model"
 	"github.com/dipankardas011/infai/scanner"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
+
+type toastTickMsg struct{}
+
+func toastTick() tea.Cmd {
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return toastTickMsg{} })
+}
 
 type screenKind int
 
@@ -26,16 +36,24 @@ const (
 type scanDoneMsg struct{ entries []model.ModelEntry }
 type saveProfileMsg struct{ profile model.Profile }
 type deleteProfileMsg struct{ id int64 }
+type syncDoneMsg struct {
+	removed, updated int
+	err              error
+}
 
 // AppModel is the root bubbletea model.
 type AppModel struct {
-	screen    screenKind
-	database  *db.DB
-	serverBin string
-	scanDirs  []string
-	width     int
-	height    int
-	errMsg    string
+	screen       screenKind
+	database     *db.DB
+	serverBin    string
+	scanDirs     []string
+	width        int
+	height       int
+	errMsg       string
+	errMsgTicks  int
+	quitArmed    bool
+	help         help.Model
+	showFullHelp bool
 
 	modelList     ModelListModel
 	profileList   ProfileListModel
@@ -65,6 +83,7 @@ func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []mode
 		scanDirs:      scanDirs,
 		width:         w,
 		height:        h,
+		help:          help.New(),
 		home:          NewHomeModel(recent, scanDirs, serverBin, w, h),
 		modelList:     NewModelListModel(entries, w, h),
 		executor:      NewExecutorModel(database, serverBin, w, h),
@@ -72,7 +91,12 @@ func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []mode
 	}
 }
 
-func (a *AppModel) Init() tea.Cmd { return nil }
+func (a *AppModel) Init() tea.Cmd { return toastTick() }
+
+func (a *AppModel) setErr(msg string) {
+	a.errMsg = msg
+	a.errMsgTicks = 0
+}
 
 func (a *AppModel) refreshHome() {
 	recent, _ := a.database.ListRecents(2)
@@ -82,8 +106,19 @@ func (a *AppModel) refreshHome() {
 func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
+	case toastTickMsg:
+		if a.errMsg != "" {
+			a.errMsgTicks++
+			if a.errMsgTicks >= 4 {
+				a.errMsg = ""
+				a.errMsgTicks = 0
+			}
+		}
+		return a, toastTick()
+
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
+		a.help.Width = msg.Width
 		a.home = a.home.SetSize(a.width, a.height)
 		a.modelList = a.modelList.SetSize(a.width, a.height)
 		a.profileList = a.profileList.SetSize(a.width, a.height)
@@ -98,7 +133,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scanDoneMsg:
 		for i := range msg.entries {
 			if err := a.database.UpsertModel(&msg.entries[i]); err != nil {
-				a.errMsg = err.Error()
+				a.setErr(err.Error())
 			}
 		}
 		a.modelList = a.modelList.SetEntries(msg.entries)
@@ -108,7 +143,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case saveProfileMsg:
 		p := msg.profile
 		if err := a.database.UpsertProfile(&p); err != nil {
-			a.errMsg = err.Error()
+			a.setErr(err.Error())
 			return a, nil
 		}
 		profiles, _ := a.database.ListProfiles(a.selectedModel.ID)
@@ -118,7 +153,7 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case deleteProfileMsg:
 		if err := a.database.DeleteProfile(msg.id); err != nil {
-			a.errMsg = err.Error()
+			a.setErr(err.Error())
 			return a, nil
 		}
 		profiles, _ := a.database.ListProfiles(a.selectedModel.ID)
@@ -146,16 +181,43 @@ func (a *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	case stopTimeoutMsg:
+		if !a.server.stopped && a.server.stopping {
+			a.server = a.server.ForceKill()
+			a.setErr("server unresponsive — sent SIGKILL")
+		}
+		return a, nil
+
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
 			if a.screen == screenServerRunning {
-				a.server = a.server.Stop()
-				return a, nil
+				if a.server.stopping || a.server.stopped {
+					a.server = a.server.ForceKill()
+					return a, tea.Quit
+				}
+				var cmd tea.Cmd
+				a.server, cmd = a.server.Stop()
+				a.setErr("shutting down server (SIGTERM)... ctrl+c again to force quit")
+				return a, cmd
 			}
-			return a, tea.Quit
+			if a.quitArmed {
+				return a, tea.Quit
+			}
+			a.quitArmed = true
+			a.setErr("press ctrl+c again to quit")
+			return a, nil
+		}
+		if a.quitArmed {
+			a.quitArmed = false
+			a.errMsg = ""
 		}
 		if a.screen == screenHome && msg.String() == "q" {
 			return a, tea.Quit
+		}
+		if msg.String() == "?" && a.screen != screenProfileEdit && a.screen != screenExecutor {
+			a.showFullHelp = !a.showFullHelp
+			a.help.ShowAll = a.showFullHelp
+			return a, nil
 		}
 
 		switch a.screen {
@@ -228,6 +290,7 @@ func (a *AppModel) updateHome(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.screen = screenModelList
 		return a, nil
 	case "f":
+		a.explore.Close()
 		a.explore = NewExploreModel(a.database, a.scanDirs, a.width, a.height)
 		a.screen = screenExplore
 		return a, nil
@@ -405,9 +468,14 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.screen = screenHome
 		return a, nil
 	case "enter":
+		if a.confirm.command == "" {
+			a.setErr("no command configured - press [c] on home screen")
+			a.screen = screenHome
+			return a, nil
+		}
 		args := a.confirm.Args()
 		if len(args) == 0 || args[0] == "" {
-			a.errMsg = "executor path not set - press [c] on home screen"
+			a.setErr("executor path not set - press [c] on home screen")
 			a.screen = screenHome
 			return a, nil
 		}
@@ -421,7 +489,7 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.height,
 		)
 		if err != nil {
-			a.errMsg = err.Error()
+			a.setErr(err.Error())
 			a.screen = screenHome
 			a.refreshHome()
 			return a, nil
@@ -436,13 +504,15 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
-		a.server = a.server.Stop()
-		return a, nil
+		var cmd tea.Cmd
+		a.server, cmd = a.server.Stop()
+		return a, cmd
 	case "esc":
-		a.server = a.server.Stop()
+		var cmd tea.Cmd
+		a.server, cmd = a.server.Stop()
 		a.refreshHome()
 		a.screen = screenHome
-		return a, nil
+		return a, cmd
 	}
 	// Pass scrolling keys to viewport.
 	var cmd tea.Cmd
@@ -453,14 +523,10 @@ func (a *AppModel) updateServer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		// DB already updated immediately on each add/remove; just sync scanDirs and rescan.
 		a.scanDirs = a.explore.Dirs()
 		a.refreshHome()
 		a.screen = screenHome
-		return a, func() tea.Msg {
-			entries, _ := scanner.Scan(a.scanDirs)
-			return scanDoneMsg{entries: entries}
-		}
+		return a, nil
 	}
 	var cmd tea.Cmd
 	a.explore, cmd = a.explore.Update(msg)
@@ -468,29 +534,82 @@ func (a *AppModel) updateExplore(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *AppModel) View() string {
-	errBanner := ""
+	toast := ""
+	toastLines := 0
 	if a.errMsg != "" {
-		errBanner = styleError.Render("error: "+a.errMsg) + "\n"
+		toast = styleError.Render("⚠ "+a.errMsg) + "\n"
+		toastLines = 2
 	}
+
+	helpView := a.helpView()
+	helpLines := 0
+	if helpView != "" {
+		helpLines = 1
+		if a.showFullHelp {
+			helpLines = 3
+		}
+	}
+	reservedH := toastLines + helpLines
+	innerH := max(a.height-reservedH, 5)
+
+	var body string
 	switch a.screen {
 	case screenHome:
-		return errBanner + a.home.View()
+		body = a.home.SetSize(a.width, innerH).View()
 	case screenModelList:
-		return errBanner + a.modelList.View()
+		body = a.modelList.SetSize(a.width, innerH).View()
 	case screenProfileList:
-		return errBanner + a.profileList.View()
+		body = a.profileList.SetSize(a.width, innerH).View()
 	case screenProfileEdit:
-		return errBanner + a.profileEdit.View()
+		body = a.profileEdit.SetSize(a.width, innerH).View()
 	case screenConfirm:
-		return errBanner + a.confirm.View()
+		body = a.confirm.SetSize(a.width, innerH).View()
 	case screenServerRunning:
-		return a.server.View()
+		body = a.server.SetSize(a.width, innerH).View()
 	case screenExplore:
-		return a.explore.View()
+		body = a.explore.SetSize(a.width, innerH).View()
 	case screenExecutor:
-		return a.executor.View()
+		body = a.executor.SetSize(a.width, innerH).View()
 	case screenThemeSelector:
-		return a.themeSelector.View()
+		body = a.themeSelector.SetSize(a.width, innerH).View()
 	}
-	return ""
+
+	out := toast + body
+	if helpView != "" {
+		out += "\n" + helpView
+	}
+	return out
+}
+
+func (a *AppModel) helpView() string {
+	t := ActiveTheme
+
+	var helpContent string
+	switch a.screen {
+	case screenHome:
+		helpContent = a.help.View(keys.Home)
+	case screenModelList:
+		helpContent = a.help.View(keys.ModelList)
+	case screenProfileList:
+		helpContent = a.help.View(keys.ProfileList)
+	case screenConfirm:
+		helpContent = a.help.View(keys.Confirm)
+	case screenServerRunning:
+		helpContent = a.help.View(keys.Server)
+	case screenExplore:
+		helpContent = a.help.View(keys.Explore)
+	case screenExecutor:
+		helpContent = a.help.View(keys.Executor)
+	default:
+		return ""
+	}
+
+	a.help.Styles.ShortKey = lipgloss.NewStyle().Foreground(t.Secondary).Bold(true)
+	a.help.Styles.ShortDesc = lipgloss.NewStyle().Foreground(t.Muted)
+	a.help.Styles.ShortSeparator = lipgloss.NewStyle().Foreground(t.Muted)
+	a.help.Styles.FullKey = lipgloss.NewStyle().Foreground(t.Secondary).Bold(true)
+	a.help.Styles.FullDesc = lipgloss.NewStyle().Foreground(t.Muted)
+	a.help.Styles.FullSeparator = lipgloss.NewStyle().Foreground(t.Muted)
+
+	return lipgloss.Place(a.width, 1, lipgloss.Center, lipgloss.Center, helpContent)
 }

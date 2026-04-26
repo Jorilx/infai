@@ -7,6 +7,13 @@ type ModelEntry struct {
 	GGUFPath    string
 	MmprojPath  string
 	DisplayName string
+	Type        string
+	Metadata    string
+}
+
+type GGUFMetadata struct {
+	Architecture string
+	ModelName    string
 }
 
 type Profile struct {

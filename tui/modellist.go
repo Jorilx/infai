@@ -9,10 +9,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/dipankardas011/infai/config"
 	"github.com/dipankardas011/infai/model"
 )
-
-const appVersion = "v0.4.0"
 
 const logoASCII = `
 ██╗███╗   ██╗███████╗ █████╗ ██╗
@@ -31,8 +30,8 @@ func (m modelItem) FilterValue() string { return m.entry.DisplayName }
 func (m modelItem) Title() string       { return m.entry.DisplayName }
 func (m modelItem) Description() string {
 	scanPart := styleMuted.Render("[" + m.entry.ScanDir + "]")
-	if m.entry.MmprojPath != "" {
-		return styleBadge.Render("mmproj") + "  " + scanPart
+	if m.entry.Type != "" {
+		return styleBadge.Render(m.entry.Type) + "  " + scanPart
 	}
 	return scanPart
 }
@@ -50,8 +49,8 @@ func (d modelDelegate) Render(w io.Writer, m list.Model, index int, item list.It
 	title := i.entry.DisplayName
 	scanPart := styleMuted.Render("[" + i.entry.ScanDir + "]")
 	desc := scanPart
-	if i.entry.MmprojPath != "" {
-		desc = styleBadge.Render("mmproj") + "  " + scanPart
+	if i.entry.Type != "" {
+		desc = styleBadge.Render(i.entry.Type) + "  " + scanPart
 	}
 
 	if index == m.Index() {
@@ -118,16 +117,9 @@ func (m ModelListModel) View() string {
 		return m.emptyView()
 	}
 	t := ActiveTheme
-	help := styleHelp.Render(
-		"enter: select  r: rescan  /: filter  esc: back",
-	)
-
 	listView := m.list.View()
 
-	content := lipgloss.JoinVertical(lipgloss.Left,
-		listView,
-		"\n"+help,
-	)
+	content := lipgloss.JoinVertical(lipgloss.Left, listView)
 
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -146,7 +138,7 @@ func (m ModelListModel) emptyView() string {
 	var sb strings.Builder
 	sb.WriteString(logoStyle.Render(logoASCII))
 	sb.WriteString("\n\n")
-	sb.WriteString(versionStyle.Render("  " + appVersion))
+	sb.WriteString(versionStyle.Render("  " + config.Version()))
 	sb.WriteString("\n\n")
 	sb.WriteString(hintStyle.Render("  no models found — press [f] to add scan folders"))
 	sb.WriteString("\n\n")

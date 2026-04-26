@@ -77,9 +77,7 @@ func (c ConfirmModel) View() string {
 		Foreground(t.Muted).
 		Render("  ESC to go back")
 
-	note := lipgloss.NewStyle().Foreground(t.Muted).Italic(true).Render(
-		fmt.Sprintf("llama-server will run inside the TUI"),
-	)
+	note := lipgloss.NewStyle().Foreground(t.Muted).Italic(true).Render("llama-server will run inside the TUI")
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		title,

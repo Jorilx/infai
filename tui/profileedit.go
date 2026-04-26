@@ -284,10 +284,7 @@ func (em ProfileEditModel) View() string {
 	title := styleTitle.Render("Edit Profile — " + em.modelEntry.DisplayName)
 	var rows []string
 
-	end := em.viewOffset + em.visibleRows
-	if end > len(em.fields) {
-		end = len(em.fields)
-	}
+	end := min(em.viewOffset+em.visibleRows, len(em.fields))
 
 	for i := em.viewOffset; i < end; i++ {
 		f := em.fields[i]
@@ -430,9 +427,10 @@ func (em ProfileEditModel) ToProfile() (model.Profile, error) {
 	ctx := ctxVal
 	if unitPtr != nil {
 		unit := *unitPtr
-		if unit == "K" {
+		switch unit {
+		case "K":
 			ctx *= 1024
-		} else if unit == "M" {
+		case "M":
 			ctx *= 1024 * 1024
 		}
 	}

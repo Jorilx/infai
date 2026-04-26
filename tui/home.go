@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dipankardas011/infai/config"
 	"github.com/dipankardas011/infai/db"
 )
 
@@ -64,7 +65,7 @@ func (m HomeModel) View() string {
 
 	header := lipgloss.JoinHorizontal(lipgloss.Bottom,
 		logoStyle.Render(logoASCII),
-		versionStyle.Render("  ("+appVersion+")"),
+		versionStyle.Render("  ("+config.Version()+")"),
 	)
 
 	hrWidth := 60
@@ -155,7 +156,6 @@ func (m HomeModel) View() string {
 		containerStyle.Render(recentBox),
 		containerStyle.Render(folderBox),
 		containerStyle.Render(execBox),
-		"\n"+styleHelp.Render("enter: select  q: quit  t: theme"),
 	)
 
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
