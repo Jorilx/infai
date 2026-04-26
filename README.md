@@ -9,8 +9,11 @@
 ╚═╝╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝╚═╝
 ```
 
+![](./cover.webp)
+
 **Zero-management launch templates for [llama.cpp](https://github.com/ggerganov/llama.cpp).**  
 Simplify configuration management and run local models faster. Perfect for rapid experimentation and testing without the need to remember complex shell commands.
+
 
 ## Features
 
