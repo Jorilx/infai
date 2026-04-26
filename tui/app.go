@@ -484,6 +484,7 @@ func (a *AppModel) updateConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			args,
 			a.selectedProfile.Name,
 			a.selectedModel.DisplayName,
+			a.selectedProfile.Host,
 			a.selectedProfile.Port,
 			a.width,
 			a.height,

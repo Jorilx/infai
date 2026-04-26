@@ -50,7 +50,10 @@ type ServerModel struct {
 	vp          viewport.Model
 	profileName string
 	modelName   string
+	host        string
 	port        int
+	metrics     string
+	startedAt   time.Time
 	stopped     bool
 	stopping    bool
 	forceKilled bool
@@ -61,7 +64,7 @@ type ServerModel struct {
 }
 
 // NewServerModel starts the server process and returns the model + initial listen cmd.
-func NewServerModel(args []string, profileName, modelName string, port, w, h int) (ServerModel, tea.Cmd, error) {
+func NewServerModel(args []string, profileName, modelName, host string, port, w, h int) (ServerModel, tea.Cmd, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 
 	pr, pw := io.Pipe()
@@ -105,15 +108,22 @@ func NewServerModel(args []string, profileName, modelName string, port, w, h int
 		vp:          vp,
 		profileName: profileName,
 		modelName:   modelName,
+		host:        host,
 		port:        port,
+		startedAt:   time.Now(),
 		width:       w,
 		height:      h,
 		initialized: true,
 	}
-	return m, listenForLog(logCh, exitCh), nil
+	return m, tea.Batch(listenForLog(logCh, exitCh), getMetricsCmd()), nil
 }
 
 func (s ServerModel) HandleLogLine(line string) (ServerModel, tea.Cmd) {
+	s = s.appendLogLine(line)
+	return s, listenForLog(s.logCh, s.exitCh)
+}
+
+func (s ServerModel) appendLogLine(line string) ServerModel {
 	s.logs = append(s.logs, line)
 	if len(s.logs) > maxLogLines {
 		s.logs = s.logs[len(s.logs)-maxLogLines:]
@@ -123,7 +133,7 @@ func (s ServerModel) HandleLogLine(line string) (ServerModel, tea.Cmd) {
 	if atBottom {
 		s.vp.GotoBottom()
 	}
-	return s, listenForLog(s.logCh, s.exitCh)
+	return s
 }
 
 func (s ServerModel) SetExited(err error) ServerModel {
@@ -165,6 +175,17 @@ func (s ServerModel) SetSize(w, h int) ServerModel {
 
 func (s ServerModel) Update(msg tea.Msg) (ServerModel, tea.Cmd) {
 	switch msg := msg.(type) {
+	case systemMetricsMsg:
+		if s.stopped {
+			return s, nil
+		}
+		s.metrics = msg.Metrics
+		return s, tickMetrics()
+	case tickMetricsMsg:
+		if s.stopped {
+			return s, nil
+		}
+		return s, getMetricsCmd()
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "c":
@@ -196,9 +217,17 @@ func (s ServerModel) View() string {
 	if s.cmd != nil && s.cmd.Process != nil {
 		pid = styleMuted.Render(fmt.Sprintf("  pid:%d", s.cmd.Process.Pid))
 	}
-	portStr := styleKey.Render(fmt.Sprintf("  port:%d", s.port))
-	header := styleTitle.Render(s.profileName) + "  " + status + pid + portStr +
-		"\n" + styleMuted.Render("  model: "+s.modelName)
+	uptime := ""
+	if !s.startedAt.IsZero() {
+		uptime = styleMuted.Render("  up:" + time.Since(s.startedAt).Truncate(time.Second).String())
+	}
+	endpoint := styleKey.Render(fmt.Sprintf("  endpoint:http://%s:%d/v1", s.host, s.port))
+	metrics := ""
+	if s.metrics != "" {
+		metrics = "\n" + styleMuted.Render("  ") + lipgloss.NewStyle().Foreground(t.Secondary).Render(s.metrics)
+	}
+	header := styleTitle.Render(s.profileName) + "  " + status + pid + uptime + endpoint +
+		"\n" + styleMuted.Render("  model: "+s.modelName) + metrics
 
 	// Log viewport
 	logView := s.vp.View()
