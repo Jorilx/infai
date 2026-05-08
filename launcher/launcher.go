@@ -22,6 +22,7 @@ func BuildArgs(serverBin string, m model.ModelEntry, p model.Profile) []string {
 		"--host", p.Host,
 		"-c", strconv.Itoa(p.ContextSize),
 		"-ngl", p.NGL,
+		"--metrics",
 	)
 
 	if p.BatchSize != nil {
@@ -58,7 +59,12 @@ func BuildArgs(serverBin string, m model.ModelEntry, p model.Profile) []string {
 		args = append(args, "--no-kv-offload")
 	}
 	if p.ExtraFlags != "" {
-		args = append(args, strings.Fields(p.ExtraFlags)...)
+		for _, f := range strings.Fields(p.ExtraFlags) {
+			if f == "--metrics" {
+				continue
+			}
+			args = append(args, f)
+		}
 	}
 
 	return args
