@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dipankardas011/infai/db"
+	"github.com/dipankardas011/infai/launcher"
 	"github.com/dipankardas011/infai/model"
 	"github.com/dipankardas011/infai/scanner"
 )
@@ -70,12 +71,33 @@ type AppModel struct {
 	selectedProfile model.Profile
 }
 
-func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []model.ModelEntry, w, h int) AppModel {
+func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []model.ModelEntry, w, h int, launchProfileName string) AppModel {
 	recent, _ := database.ListRecents(2)
 
 	dbBin, err := database.GetDefaultExecutorPath()
 	if err == nil && dbBin != "" {
 		serverBin = dbBin
+	}
+
+	var selModel model.ModelEntry
+	var selProfile model.Profile
+	if launchProfileName != "" {
+		profiles, err := database.ListProfiles(0)
+		if err == nil {
+			for i := range profiles {
+				if profiles[i].Name == launchProfileName {
+					models, _ := database.ListModels()
+					for j := range models {
+						if models[j].ID == profiles[i].ModelID {
+							selProfile = profiles[i]
+							selModel = models[j]
+							break
+						}
+					}
+					break
+				}
+			}
+		}
 	}
 
 	return AppModel{
@@ -87,12 +109,35 @@ func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []mode
 		help:          help.New(),
 		home:          NewHomeModel(recent, scanDirs, serverBin, w, h),
 		modelList:     NewModelListModel(entries, w, h),
-		executor:      NewExecutorModel(database, serverBin, w, h),
-		themeSelector: NewThemeSelectorModel(w, h),
+		executor:        NewExecutorModel(database, serverBin, w, h),
+		themeSelector:   NewThemeSelectorModel(w, h),
+		selectedModel:   selModel,
+		selectedProfile: selProfile,
 	}
 }
 
-func (a *AppModel) Init() tea.Cmd { return toastTick() }
+func (a *AppModel) Init() tea.Cmd {
+	if a.selectedProfile.Name != "" {
+		args := launcher.BuildArgs(a.serverBin, a.selectedModel, a.selectedProfile)
+		sm, cmd, err := NewServerModel(
+			args,
+			a.selectedProfile.Name,
+			a.selectedModel.DisplayName,
+			a.selectedModel.Type,
+			a.selectedProfile.ContextSize,
+			a.selectedProfile.Host,
+			a.selectedProfile.Port,
+			a.width,
+			a.height,
+		)
+		if err == nil {
+			a.server = sm
+			a.screen = screenServerRunning
+		}
+		return cmd
+	}
+	return toastTick()
+}
 
 func (a *AppModel) setErr(msg string) {
 	a.errMsg = msg

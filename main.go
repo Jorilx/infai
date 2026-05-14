@@ -18,6 +18,7 @@ import (
 
 func main() {
 	showVersion := flag.Bool("version", false, "print version")
+	profileName := flag.String("p", "", "profile name to launch")
 	flag.Parse()
 
 	if *showVersion {
@@ -66,7 +67,7 @@ func main() {
 		}
 	}
 
-	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24)
+	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24, *profileName)
 	p := tea.NewProgram(&app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	sigChan := make(chan os.Signal, 1)
