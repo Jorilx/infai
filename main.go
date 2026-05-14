@@ -67,8 +67,12 @@ func main() {
 		}
 	}
 
-	app := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24, *profileName)
-	p := tea.NewProgram(&app, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	app, err := tui.NewApp(database, serverBin, scanDirs, entries, 80, 24, *profileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	p := tea.NewProgram(app, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)

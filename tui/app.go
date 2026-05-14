@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/bubbles/help"
@@ -71,7 +72,7 @@ type AppModel struct {
 	selectedProfile model.Profile
 }
 
-func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []model.ModelEntry, w, h int, launchProfileName string) AppModel {
+func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []model.ModelEntry, w, h int, launchProfileName string) (*AppModel, error) {
 	recent, _ := database.ListRecents(2)
 
 	dbBin, err := database.GetDefaultExecutorPath()
@@ -83,37 +84,41 @@ func NewApp(database *db.DB, serverBin string, scanDirs []string, entries []mode
 	var selProfile model.Profile
 	if launchProfileName != "" {
 		profiles, err := database.ListProfiles(0)
-		if err == nil {
-			for i := range profiles {
-				if profiles[i].Name == launchProfileName {
-					models, _ := database.ListModels()
-					for j := range models {
-						if models[j].ID == profiles[i].ModelID {
-							selProfile = profiles[i]
-							selModel = models[j]
-							break
-						}
-					}
-					break
+		if err != nil {
+			return nil, fmt.Errorf("list profiles: %w", err)
+		}
+		for i := range profiles {
+			if profiles[i].Name == launchProfileName {
+				models, err := database.ListModels()
+				if err != nil {
+					return nil, fmt.Errorf("list models: %w", err)
 				}
+				for j := range models {
+					if models[j].ID == profiles[i].ModelID {
+						selProfile = profiles[i]
+						selModel = models[j]
+						break
+					}
+				}
+				break
 			}
 		}
 	}
 
-	return AppModel{
-		database:      database,
-		serverBin:     serverBin,
-		scanDirs:      scanDirs,
-		width:         w,
-		height:        h,
-		help:          help.New(),
-		home:          NewHomeModel(recent, scanDirs, serverBin, w, h),
-		modelList:     NewModelListModel(entries, w, h),
+	return &AppModel{
+		database:        database,
+		serverBin:       serverBin,
+		scanDirs:        scanDirs,
+		width:           w,
+		height:          h,
+		help:            help.New(),
+		home:            NewHomeModel(recent, scanDirs, serverBin, w, h),
+		modelList:       NewModelListModel(entries, w, h),
 		executor:        NewExecutorModel(database, serverBin, w, h),
 		themeSelector:   NewThemeSelectorModel(w, h),
 		selectedModel:   selModel,
 		selectedProfile: selProfile,
-	}
+	}, nil
 }
 
 func (a *AppModel) Init() tea.Cmd {
